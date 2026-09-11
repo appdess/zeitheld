@@ -452,7 +452,7 @@ final class WatchLearnUITests: XCTestCase {
         XCTAssertTrue(stop.exists)
         XCTAssertTrue(stop.isHittable)
         XCTAssertLessThanOrEqual(status.frame.maxY, navigation.frame.minY + 1)
-        XCTAssertTrue(app.staticTexts["Coach is speaking"].exists)
+        XCTAssertTrue(app.staticTexts["Time Hero is speaking"].exists)
         XCTAssertLessThanOrEqual(
             status.frame.height,
             72,

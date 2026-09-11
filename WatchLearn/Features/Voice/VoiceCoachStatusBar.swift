@@ -41,7 +41,7 @@ struct VoiceCoachStatusBar: View {
             .tint(.red)
             .accessibilityLabel(copy(
                 de: "Zeithelden stoppen",
-                en: "Stop voice coach"
+                en: "Stop talking to Time Hero"
             ))
             .accessibilityIdentifier("voice-stop-button")
         }
@@ -91,7 +91,7 @@ struct VoiceCoachStatusBar: View {
         case .childSpeaking:
             copy(de: "Ich kann dich hören", en: "I can hear you")
         case .coachSpeaking:
-            copy(de: "Der Coach spricht", en: "Coach is speaking")
+            copy(de: "Dein Zeitheld spricht", en: "Time Hero is speaking")
         case let .failed(message): message
         case .idle: ""
         }

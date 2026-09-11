@@ -76,11 +76,10 @@ final class WatchLearnUITests: XCTestCase {
         app.buttons["parent-settings-button"].tap()
         for (linkTitle, pageTitle) in [("Beta terms of use", "Beta use"), ("Nutzungsbedingungen der Beta", "Beta-Nutzung")] {
             if pageTitle == "Beta-Nutzung" {
+                app.buttons["settings-done-button"].tap()
+                app.buttons["parent-settings-button"].tap()
                 let picker = app.segmentedControls["language-picker"]
-                for _ in 0..<10 where !picker.isHittable { app.swipeDown() }
-                // A hittable segment can still be clipped by the sheet edge.
-                // Bring the complete control into the body before selecting it.
-                app.swipeDown()
+                scrollTo(picker, in: app)
                 picker.buttons["Deutsch"].tap()
                 XCTAssertTrue(app.navigationBars["Einstellungen"].waitForExistence(timeout: 3))
             }
@@ -212,11 +211,25 @@ final class WatchLearnUITests: XCTestCase {
     }
 
     private func scrollTo(_ element: XCUIElement, in app: XCUIApplication) {
+        func visibleBounds() -> ClosedRange<CGFloat> {
+            let navigation = app.navigationBars.firstMatch
+            let top = navigation.exists ? navigation.frame.maxY + 8 : app.frame.minY + 100
+            return top...(app.frame.maxY - 90)
+        }
         for _ in 0..<18 {
-            if element.exists && element.isHittable { break }
+            if element.exists {
+                let frame = element.frame, bounds = visibleBounds()
+                if element.isHittable && frame.minY >= bounds.lowerBound && frame.maxY <= bounds.upperBound {
+                    return
+                }
+                if !frame.isEmpty && frame.minY < bounds.lowerBound {
+                    app.swipeDown()
+                    continue
+                }
+            }
             app.swipeUp()
         }
-        XCTAssertTrue(element.isHittable)
+        XCTFail("Control did not become fully visible: \(element.identifier)")
     }
 
     private func acceptFixtureAgreement(_ app: XCUIApplication, voice: Bool, hero: Bool = false) {
@@ -228,6 +241,8 @@ final class WatchLearnUITests: XCTestCase {
             let toggle = app.switches[id]
             scrollTo(toggle, in: app)
             toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+            let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '1'"), object: toggle)
+            XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 3), .completed, "Permission did not turn on: \(id)")
         }
         let confirm = app.buttons["agreement-confirm"]
         scrollTo(confirm, in: app)
@@ -308,6 +323,7 @@ final class WatchLearnUITests: XCTestCase {
         for _ in 0..<5 where !label.isHittable { app.swipeUp() }
         XCTAssertTrue(label.waitForExistence(timeout: 3))
         XCTAssertTrue(label.isHittable)
+        scrollTo(app.buttons["live-connection-check"], in: app)
         XCTAssertTrue(app.buttons["live-connection-check"].exists)
         XCTAssertFalse(app.buttons["live-connection-check"].isEnabled)
         XCTAssertFalse(app.staticTexts["live-connection-success"].exists)

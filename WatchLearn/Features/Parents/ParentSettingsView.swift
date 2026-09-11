@@ -9,6 +9,7 @@ struct ParentSettingsView: View {
 
     @State private var showingResetJourney = false
     @State private var apiKeyDraft = ""
+    @FocusState private var apiKeyFocused: Bool
     @State private var connectionCheckRequest: UUID?
     @State private var showingPrivateKey = false
     @State private var showingDeleteHeroConfirmation = false
@@ -326,6 +327,7 @@ struct ParentSettingsView: View {
         Section {
             LabeledContent(copy(de: "API-Endpunkt", en: "API endpoint"), value: "api.openai.com/v1")
             SecureField(copy(de: "OpenAI API-Key", en: "OpenAI API key"), text: $apiKeyDraft)
+                .focused($apiKeyFocused)
                 .textContentType(.password)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -443,6 +445,7 @@ struct ParentSettingsView: View {
     private func storeAPIKey() {
         do {
             try preferences.storeAPIKey(apiKeyDraft)
+            apiKeyFocused = false
             // This explicit action selects the own-key route;
             // cloud-feature consent remains a separate opt-in.
             preferences.selectCloudVoiceMode(.parentKey)

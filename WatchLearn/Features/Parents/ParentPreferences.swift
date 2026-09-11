@@ -167,6 +167,10 @@ final class ParentPreferences {
     func deleteAPIKey() throws {
         try secureStore.removeValue(for: Keys.apiKey)
         hasStoredAPIKey = false
+        if cloudVoiceMode == .parentKey {
+            hasCloudVoiceConsent = false
+            hasHeroGenerationConsent = false
+        }
         invalidateConnectionCheck()
     }
 

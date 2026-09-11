@@ -26,13 +26,15 @@ final class WatchLearnUITests: XCTestCase {
     }
 
     private func revealPrivateKey(_ app: XCUIApplication) {
+        // Start from the top of a fresh Settings sheet, regardless of the
+        // preceding permissions/language scroll position or expanded state.
+        app.buttons["settings-done-button"].tap()
+        app.buttons["parent-settings-button"].tap()
         let disclosure = app.buttons["private-key-disclosure"]
-        for _ in 0..<8 where !disclosure.isHittable { app.swipeDown() }
-        for _ in 0..<8 where !disclosure.isHittable { app.swipeUp() }
-        XCTAssertTrue(disclosure.isHittable)
+        scrollTo(disclosure, in: app)
         disclosure.tap()
         let key = app.secureTextFields["api-key-field"]
-        for _ in 0..<4 where !key.isHittable { app.swipeUp() }
+        scrollTo(key, in: app)
     }
 
     func testFiveMinuteTrialAndOwnKeyAreAvailableWithoutSigningIn() throws {
@@ -48,12 +50,14 @@ final class WatchLearnUITests: XCTestCase {
         picker.buttons["Own API key"].tap()
         // This also runs against Release, where fixture/reset switches are absent.
         let field = app.secureTextFields["api-key-field"]
-        if !field.exists { revealPrivateKey(app) }
+        revealPrivateKey(app)
         scrollTo(field, in: app)
         field.tap()
         field.typeText("sk-fixture-never-real-release-1234567890")
         app.buttons["api-key-save"].tap()
         XCTAssertTrue(app.staticTexts["Stored in iOS Keychain"].exists)
+        // Verify the saved key can also be removed after leaving Settings.
+        revealPrivateKey(app)
         let delete = app.buttons["api-key-delete"]
         scrollTo(delete, in: app)
         delete.tap()

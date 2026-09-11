@@ -24,8 +24,12 @@ privacy confirmation, optional purpose separation and withdrawal. UI tests use
 explicit Debug-only fixtures; they do not prove live model behavior.
 
 The Hero Lab fixture shows recording, processing and accepted text without using
-a microphone. Its transcription delay is deliberately long enough to observe in
-XCTest; production requests do not have that artificial delay.
+a microphone. Generation and transcription pause at a Debug-only request gate.
+XCTest first observes the pending UI state, then taps the fixture completion
+control; no wall-clock delay determines whether the state can be observed.
+These controls exist only for the explicit fixture launch and are excluded from
+Release builds. Hosted UI tests use Apple Silicon; Intel analysis and Release
+builds separately retain compiler and architecture coverage.
 
 For the backend:
 

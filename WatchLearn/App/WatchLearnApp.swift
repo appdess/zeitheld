@@ -44,7 +44,7 @@ struct WatchLearnApp: App {
             generatedHeroImageStore = GeneratedHeroImageStore()
         }
         let imageGenerator: any HeroImageGenerating = usesHeroGenerationUITestFixture
-            ? DelayedHeroImageUITestGenerator()
+            ? ControlledHeroImageUITestGenerator()
             : OpenAIHeroImageGenerationService()
         let usageBudget: any HeroCloudUsageBudgeting = usesHeroGenerationUITestFixture
             ? UnlimitedHeroCloudUsageBudget()

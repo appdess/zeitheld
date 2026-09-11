@@ -17,6 +17,7 @@ final class HeroGenerationPersistenceUITests: XCTestCase {
         recording.name = "Hero recording feedback"; recording.lifetime = .keepAlways; add(recording)
         microphone.tap()
         XCTAssertTrue(app.descendants(matching: .any)["hero-transcribing-status"].firstMatch.waitForExistence(timeout: 2))
+        completeFixtureRequest("description", in: app)
         XCTAssertTrue(app.descendants(matching: .any)["hero-description-accepted"].firstMatch.waitForExistence(timeout: 12))
         XCTAssertEqual(app.textViews["hero-description-text"].value as? String, "A friendly hero with a blue cape.")
         app.buttons["hero-back-to-clock"].tap()
@@ -61,6 +62,7 @@ final class HeroGenerationPersistenceUITests: XCTestCase {
         let generate = app.buttons["hero-generate-button"]
         scrollUpUntilHittable(generate, in: app)
         generate.tap()
+        completeFixtureRequest("image", in: app)
         let select = app.buttons["hero-select-background"]
         XCTAssertTrue(select.waitForExistence(timeout: 12))
         scrollUpUntilHittable(select, in: app)
@@ -98,7 +100,7 @@ final class HeroGenerationPersistenceUITests: XCTestCase {
 
         // The deterministic generator finishes while the Hero Lab is absent.
         XCTAssertFalse(app.images["learning-custom-hero-background"].exists)
-        sleep(5)
+        completeFixtureRequest("image", in: app)
         app.buttons["hero-lab-tab"].tap()
 
         let selectButton = app.buttons["hero-select-background"]
@@ -145,12 +147,19 @@ final class HeroGenerationPersistenceUITests: XCTestCase {
         ]
     }
 
+    private func completeFixtureRequest(_ request: String, in app: XCUIApplication) {
+        let completion = app.buttons["ui-test-fixture-complete-\(request)"]
+        XCTAssertTrue(completion.waitForExistence(timeout: 5))
+        completion.tap()
+    }
+
     private func scrollUpUntilHittable(
         _ element: XCUIElement,
         in app: XCUIApplication,
         attempts: Int = 8
     ) {
-        for _ in 0..<attempts where !element.exists || !element.isHittable {
+        for _ in 0..<attempts {
+            if element.exists && element.isHittable { return }
             app.swipeUp()
         }
         XCTAssertTrue(element.waitForExistence(timeout: 3))

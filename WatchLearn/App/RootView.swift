@@ -116,6 +116,11 @@ struct RootView: View {
         .toolbar(.hidden, for: .tabBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
+                #if DEBUG
+                if usesHeroGenerationUITestFixture {
+                    HeroUITestCompletionControls()
+                }
+                #endif
                 if selectedTab == 0, voiceCoach.phase.isVisible {
                     VoiceCoachStatusBar(
                         coordinator: voiceCoach,

@@ -6,7 +6,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { CloudTasksClient } from '@google-cloud/tasks';
 import { OAuth2Client } from 'google-auth-library';
 import { closeLiveProvider } from './provider-close.js';
-import { AppError, identity, hash } from './policy.js';
+import { AppError, identity, hash, TRIAL_SECONDS } from './policy.js';
 import { Ledger } from './ledger.js';
 import { sessionStart } from './session.js';
 import { generateHero, transcribeHero } from './heroes.js';
@@ -171,7 +171,7 @@ async function extractAnswer(who, id, input) {
 }
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.url === '/health' && req.method === 'GET') return json(res, 200, { status: 'ok', transport: 'direct-webrtc', publicAccess: process.env.PUBLIC_ACCESS_ENABLED === 'true' });
+    if (req.url === '/health' && req.method === 'GET') return json(res, 200, { status: 'ok', transport: 'direct-webrtc', trialSeconds: TRIAL_SECONDS, publicAccess: process.env.PUBLIC_ACCESS_ENABLED === 'true' });
     if (req.url === '/internal/close' && req.method === 'POST') {
       const bearer = req.headers.authorization?.replace(/^Bearer /, '');
       const ticket = await oidc.verifyIdToken({ idToken: bearer, audience: serviceURL });

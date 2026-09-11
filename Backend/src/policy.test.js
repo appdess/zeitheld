@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { identity, hash, reserveTrial, settleTrial } from './policy.js';
+import { identity, hash, remainingTrialSeconds, reserveTrial, settleTrial } from './policy.js';
 
 test('trial is tied to verified Apple identity, not Firebase UID or claimed email', () => {
   const auth = {uid:'first', email:'Tester@Example.com', email_verified:true,
@@ -13,19 +13,29 @@ test('trial is tied to verified Apple identity, not Firebase UID or claimed emai
 });
 test('reservation blocks concurrent devices and refunds only final measured usage', () => {
   const first = reserveTrial(null, {now:0, sessionID:'one', unlimited:false});
-  assert.equal(first.usedSeconds, 600);
+  assert.equal(first.usedSeconds, 300);
   assert.throws(() => reserveTrial(first, {now:100, sessionID:'two', unlimited:false}), /session_already_active/);
   const settled = settleTrial(first, 'one', 31.2);
   assert.equal(settled.usedSeconds, 32);
   assert.equal(settleTrial(settled, 'one', 0), null);
   const next = reserveTrial(settled, {now:200, sessionID:'two', unlimited:false});
-  assert.equal(next.active.reservedSeconds, 568);
+  assert.equal(next.active.reservedSeconds, 268);
   assert.equal(settleTrial(next, 'one', 0), null);
 });
 test('lost final usage cannot replenish a trial and less than initialization minimum is refused', () => {
   const reserved = reserveTrial(null, {now:0, sessionID:'one', unlimited:false});
-  assert.equal(settleTrial(reserved, 'one', undefined).usedSeconds, 600);
-  assert.throws(() => reserveTrial({usedSeconds:586}, {now:0, sessionID:'two', unlimited:false}), /trial_exhausted/);
+  assert.equal(settleTrial(reserved, 'one', undefined).usedSeconds, 300);
+  assert.throws(() => reserveTrial({usedSeconds:286}, {now:0, sessionID:'two', unlimited:false}), /trial_exhausted/);
+});
+test('five-minute allowance preserves consumed time and never resets an existing trial', () => {
+  assert.equal(remainingTrialSeconds(null), 300);
+  assert.equal(remainingTrialSeconds({usedSeconds:120}), 180);
+  for (const usedSeconds of [300, 450, 600]) {
+    assert.equal(remainingTrialSeconds({usedSeconds}), 0);
+    assert.throws(() => reserveTrial({usedSeconds}, {now:0, sessionID:'later', unlimited:false}), /trial_exhausted/);
+  }
+  const last = reserveTrial({usedSeconds:285}, {now:0, sessionID:'last', unlimited:false});
+  assert.equal(last.active.reservedSeconds, 15);
 });
 test('unlimited bypasses trial balance while preserving a session deadline', () => {
   const reserved = reserveTrial({usedSeconds:600}, {now:1000, sessionID:'one', unlimited:true});

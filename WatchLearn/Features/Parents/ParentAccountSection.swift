@@ -14,6 +14,10 @@ struct ParentAccountSection: View {
                     Text(allowance.unlimited ? copy("Unbegrenzter Testzugang", "Unlimited test access")
                          : copy("Testzeit übrig: ", "Trial remaining: ") + remaining(allowance.remainingSeconds ?? 0))
                         .accessibilityIdentifier("account-allowance")
+                    if !allowance.unlimited && allowance.remainingSeconds == 0 && !allowance.active {
+                        Text(copy("Deine Gratisminuten sind aufgebraucht. Wähle unten „Eigener API-Key“, um mit deinem eigenen Zugang weiterzumachen. Offline üben bleibt kostenlos.", "Your free minutes are used up. Choose Own API key below to continue with your own access. Offline practice stays free."))
+                            .accessibilityIdentifier("trial-complete-help")
+                    }
                     if !allowance.available {
                         Text(copy("Dein Online-Zeitheld wird für die Veröffentlichung vorbereitet. Offline kannst du weiter üben.", "Your online Time Hero is being prepared for release. You can keep practicing offline."))
                             .font(.footnote)
@@ -34,7 +38,8 @@ struct ParentAccountSection: View {
                     onDeleteAccount()
                 }
             } else {
-                Text(copy("10 Minuten kostenlos ausprobieren. Eine erwachsene Person meldet sich an. Kein API-Key nötig.", "Try 10 minutes free. A parent signs in. No API key needed."))
+                Text(copy("Mit Apple anmelden und 5 Minuten kostenlos mit deinem Zeithelden sprechen. Kein eigener API-Key nötig.", "Sign in with Apple for 5 free minutes with your Time Hero. No API key needed."))
+                    .accessibilityIdentifier("free-trial-introduction")
                 if preferences.hasCurrentAgreement {
                 SignInWithAppleButton(.signIn, onRequest: {
                     account.prepare($0, agreement: preferences.agreementAcceptance?.document)
@@ -64,7 +69,7 @@ struct ParentAccountSection: View {
             if let message = account.message { Text(message).font(.footnote).foregroundStyle(.orange) }
         } header: { Text(copy("Elternkonto", "Parent account")) }
         footer: {
-            Text(copy("Die 10 Testminuten gelten einmal pro Apple-Konto und auf allen Geräten gemeinsam. Keine automatische Zahlung. Lernfortschritt bleibt auf diesem Gerät.", "The 10 trial minutes apply once per Apple account and are shared across devices. No automatic charges. Learning progress stays on this device."))
+            Text(copy("Die 5 Testminuten gelten einmal pro Apple-Konto und auf allen Geräten gemeinsam. Keine automatische Zahlung. Lernfortschritt bleibt auf diesem Gerät.", "The 5 trial minutes apply once per Apple account and are shared across devices. No automatic charges. Learning progress stays on this device."))
         }
         .task { await account.refresh() }
     }

@@ -60,6 +60,25 @@ final class ParentAgreementTests: XCTestCase {
         XCTAssertFalse(withdrawn.hasCurrentAgreement)
         XCTAssertFalse(withdrawn.hasAnyOnlineFeatureEnabled)
     }
+
+    func testSwitchingAccessMethodRequiresFreshLocalPermissionAndKeepsSavedChoices() throws {
+        let name = #function, defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        defaults.removePersistentDomain(forName: name)
+        let preferences = ParentPreferences(secureStore: AgreementTestSecureStore(), defaults: defaults)
+        preferences.selectCloudVoiceMode(.parentKey)
+        preferences.recordAgreement(document())
+        XCTAssertTrue(preferences.hasCloudVoiceConsent)
+        preferences.selectCloudVoiceMode(.managedAccount)
+        XCTAssertFalse(preferences.hasAnyOnlineFeatureEnabled)
+        XCTAssertTrue(preferences.hasCurrentAgreement)
+        preferences.selectCloudVoiceMode(.parentKey)
+        XCTAssertFalse(preferences.hasAnyOnlineFeatureEnabled)
+        // A fresh, explicit review can enable own-key use without Apple sign-in.
+        preferences.recordAgreement(document())
+        XCTAssertTrue(preferences.hasCloudVoiceConsent)
+        XCTAssertNil(preferences.agreementAcceptance?.accountID)
+    }
 }
 
 private struct AgreementTestSecureStore: SecureStore {

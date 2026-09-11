@@ -51,7 +51,7 @@ finish before deletion reports success. Deleted account permission records have
 a 30-day expiry. The last accepted document remains in the current receipt after
 withdrawal. This implementation is not verification of a child's legal guardian.
 
-Stable Apple identities are HMAC-hashed for a one-time 600-second family trial,
+Stable Apple identities are HMAC-hashed for a one-time 300-second (five-minute) family trial,
 shared across devices. One session per family, bounded answer delegation and
 scheduled closure limit usage. Normal Hero allowances are three image attempts
 and ten audio attempts, with a 15-second cooldown. Invalid audio attempts count

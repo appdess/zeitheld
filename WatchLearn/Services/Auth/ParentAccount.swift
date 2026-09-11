@@ -21,7 +21,7 @@ enum ManagedAccountError: LocalizedError {
         case .signInRequired: "Sign in with Apple in parent settings."
         case .unavailable: "The service is not available yet."
         case .invalidSignIn: "Apple sign-in could not be verified."
-        case .trialExhausted: "Your 10-minute trial is complete. Offline clock practice remains available."
+        case .trialExhausted: "Your 5-minute trial is complete. Bring your own API key in Settings or keep practising offline."
         case .sessionAlreadyActive: "A conversation is still closing. Please try again shortly."
         case .malformedResponse: "The service returned an incomplete session."
         case .agreementRequired: "Review privacy and permissions in parent settings."

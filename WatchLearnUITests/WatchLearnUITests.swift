@@ -27,11 +27,42 @@ final class WatchLearnUITests: XCTestCase {
 
     private func revealPrivateKey(_ app: XCUIApplication) {
         let disclosure = app.buttons["private-key-disclosure"]
+        for _ in 0..<8 where !disclosure.isHittable { app.swipeDown() }
         for _ in 0..<8 where !disclosure.isHittable { app.swipeUp() }
         XCTAssertTrue(disclosure.isHittable)
         disclosure.tap()
         let key = app.secureTextFields["api-key-field"]
         for _ in 0..<4 where !key.isHittable { app.swipeUp() }
+    }
+
+    func testFiveMinuteTrialAndOwnKeyAreAvailableWithoutSigningIn() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--english", "-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-parent.language", "en", "-parent.follows-device-language", "NO"]
+        app.launch()
+        app.buttons["parent-settings-button"].tap()
+        let intro = app.staticTexts["free-trial-introduction"]
+        XCTAssertTrue(intro.waitForExistence(timeout: 5))
+        XCTAssertTrue(intro.label.contains("5 free minutes"))
+        let picker = app.segmentedControls["online-access-picker"]
+        scrollTo(picker, in: app)
+        picker.buttons["Own API key"].tap()
+        // This also runs against Release, where fixture/reset switches are absent.
+        let field = app.secureTextFields["api-key-field"]
+        if !field.exists { revealPrivateKey(app) }
+        scrollTo(field, in: app)
+        field.tap()
+        field.typeText("sk-fixture-never-real-release-1234567890")
+        app.buttons["api-key-save"].tap()
+        XCTAssertTrue(app.staticTexts["Stored in iOS Keychain"].exists)
+        let delete = app.buttons["api-key-delete"]
+        scrollTo(delete, in: app)
+        delete.tap()
+        XCTAssertFalse(delete.exists)
+        let issues = app.buttons["report-issue-link"]
+        scrollTo(issues, in: app)
+        XCTAssertTrue(issues.label.contains("GitHub"))
+        app.buttons["settings-done-button"].tap()
+        XCTAssertTrue(app.buttons["voice-coach-button"].isHittable)
     }
 
     func testBetaTermsAreAvailableInBothLanguagesAndReturnToSettings() throws {

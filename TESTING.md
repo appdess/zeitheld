@@ -93,3 +93,5 @@ parental permission withdrawal on the actual supported iPhone/iPad versions.
 Keep build success, UI fixture success, real provider conversation, deployment
 readback, installed device version and App Store availability as separate results.
 Security review and test success do not establish child-privacy compliance.
+
+Release CI also verifies the five-minute signup description, own-key entry and deletion without Apple sign-in, and the public GitHub issue link. Test keys are synthetic and never used for a provider request. The backend tests preserve existing consumed time when applying the five-minute allowance.

@@ -179,9 +179,9 @@ struct VoiceCoachFailure: Equatable, Sendable {
         case (.sessionAlreadyActive, .english):
             message = "A conversation is still active or finishing. End it on the other device or try again shortly."
         case (.trialExhausted, .german):
-            message = "Deine zehn Probeminuten sind aufgebraucht. Mit den Uhr-Knöpfen kannst du weiterüben."
+            message = "Deine fünf Probeminuten sind aufgebraucht. In den Einstellungen kann eine erwachsene Person einen eigenen API-Key hinzufügen. Offline kannst du weiterüben."
         case (.trialExhausted, .english):
-            message = "Your ten trial minutes are used up. You can keep practising with the clock buttons."
+            message = "Your five trial minutes are used up. A parent can add their own API key in Settings. You can keep practising offline."
         case (.audioConfiguration, .german):
             message = "iOS konnte den Audiomodus nicht konfigurieren. Beende das Gespräch und starte ihn erneut."
         case (.audioConfiguration, .english):

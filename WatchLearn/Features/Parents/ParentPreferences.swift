@@ -226,6 +226,15 @@ final class ParentPreferences {
         hasCloudVoiceConsent = false
     }
 
+    /// Switching who supplies online access stops current work. Permissions are
+    /// explicitly reviewed again before requests can use the selected route.
+    func selectCloudVoiceMode(_ mode: CloudVoiceMode) {
+        guard cloudVoiceMode != mode else { return }
+        hasCloudVoiceConsent = false
+        hasHeroGenerationConsent = false
+        cloudVoiceMode = mode
+    }
+
     func revokeHeroGenerationConsent() {
         hasHeroGenerationConsent = false
     }

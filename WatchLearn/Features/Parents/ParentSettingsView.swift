@@ -10,7 +10,6 @@ struct ParentSettingsView: View {
     @State private var showingResetJourney = false
     @State private var apiKeyDraft = ""
     @State private var connectionCheckRequest: UUID?
-    @State private var showingAdvancedServer = false
     @State private var showingPrivateKey = false
     @State private var showingDeleteHeroConfirmation = false
     @State private var errorMessage: String?
@@ -43,6 +42,8 @@ struct ParentSettingsView: View {
                 ParentAccountSection(preferences: preferences,
                     onReviewAgreement: { activeSheet = .agreement },
                     onDeleteAccount: { activeSheet = .accountDeletion })
+                onlineAccessSection
+                privateKeySection
                 Section(copy(de: "Sprache", en: "Language")) {
                     Toggle(copy(de: "Gerätesprache verwenden", en: "Use device language"), isOn: $preferences.followsDeviceLanguage)
                         .accessibilityIdentifier("device-language-toggle")
@@ -103,68 +104,6 @@ struct ParentSettingsView: View {
                     ))
                 }
 
-                #if DEBUG
-                Section {
-                    Button {
-                        showingPrivateKey.toggle()
-                    } label: {
-                        HStack {
-                            Text(copy(de: "Privater API-Key (Entwicklung)", en: "Private API key (development)"))
-                            Spacer()
-                            Image(systemName: showingPrivateKey ? "chevron.up" : "chevron.down")
-                        }
-                    }
-                    .accessibilityIdentifier("private-key-disclosure")
-                }
-                if showingPrivateKey {
-                Section {
-                    SecureField(copy(de: "OpenAI API-Key", en: "OpenAI API key"), text: $apiKeyDraft)
-                        .textContentType(.password)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .privacySensitive()
-                        .accessibilityIdentifier("api-key-field")
-
-                    Button(preferences.hasStoredAPIKey
-                           ? copy(de: "Key ersetzen", en: "Replace key")
-                           : copy(de: "Key speichern und verwenden", en: "Save and use key")) {
-                        storeAPIKey()
-                    }
-                    .disabled(apiKeyDraft.isEmpty)
-                    .accessibilityIdentifier("api-key-save")
-
-                    if preferences.hasStoredAPIKey {
-                        Label(
-                            copy(de: "Im iOS-Schlüsselbund gespeichert", en: "Stored in iOS Keychain"),
-                            systemImage: "lock.shield.fill"
-                        )
-                        .foregroundStyle(.green)
-
-                        Button(copy(de: "Key löschen", en: "Delete key"), role: .destructive) {
-                            deleteAPIKey()
-                        }
-                        .accessibilityIdentifier("api-key-delete")
-                    }
-
-                    Link(
-                        copy(de: "OpenAI API-Key erstellen", en: "Create an OpenAI API key"),
-                        destination: URL(string: "https://platform.openai.com/api-keys")!
-                    )
-                    Link(
-                        copy(de: "API-Guthaben und Kosten verwalten", en: "Manage API credits and billing"),
-                        destination: URL(string: "https://platform.openai.com/settings/organization/billing/overview")!
-                    )
-                } header: {
-                    Text(copy(de: "1 · OpenAI verbinden", en: "1 · Connect OpenAI"))
-                } footer: {
-                    Text(copy(
-                        de: "OpenAI ist vorausgewählt. Eine ChatGPT-Anmeldung oder ein Plus/Pro-Abo kann nicht per OAuth für die API dieser App verwendet werden; API-Nutzung wird separat abgerechnet. Der Key bleibt im geschützten Schlüsselbund dieses Geräts. Einmal pro iPhone oder iPad eingeben; ein Mac-Schlüsselbund-Eintrag wird nicht automatisch übernommen. Für die private Nutzung mit eigenem Key.",
-                        en: "OpenAI is preselected. A ChatGPT sign-in or Plus/Pro subscription cannot be used through OAuth for this app's API usage; API billing is separate. The key stays in this device’s protected Keychain. Enter it once per iPhone or iPad; a Mac Keychain entry is not imported automatically. For private use with your own key."
-                    ))
-                }
-
-                }
-                #endif
                 Section {
                     Label("GPT-Live 1", systemImage: "waveform")
                     Text(copy(de: "Einmal starten und auf Deutsch oder Englisch sprechen. Dein Zeitheld hört auch beim Sprechen zu. Du kannst ihn jederzeit unterbrechen.", en: "Start once and speak in German or English. Your Time Hero listens while speaking. You can interrupt at any time."))
@@ -194,8 +133,8 @@ struct ParentSettingsView: View {
                     case .checking:
                         Text(copy(de: "Dein Zeitheld wird verbunden …", en: "Connecting to your Time Hero…"))
                     case .idle:
-                        Text(copy(de: "Anmelden, die Sprachfunktion unter Datenschutz und Berechtigungen erlauben und die Verbindung prüfen.",
-                                  en: "Sign in, allow voice under Privacy and permissions, then check the connection."))
+                        Text(copy(de: "Mit Apple anmelden oder einen eigenen API-Key hinzufügen. Danach die Sprachfunktion unter Datenschutz und Berechtigungen erlauben und die Verbindung prüfen.",
+                                  en: "Sign in with Apple or add your own API key. Then allow voice under Privacy and permissions and check the connection."))
                     }
                 } header: {
                     Text(copy(de: "Bereit zum Sprechen", en: "Ready to talk"))
@@ -208,7 +147,7 @@ struct ParentSettingsView: View {
                     Section {
                         Text(copy(de: "Dein bisheriger Token-Server verwendet die ältere Sprachverbindung. Für diese private Live-Version bitte den eigenen API-Key verwenden.", en: "Your saved token server uses the older voice connection. Use your own API key for this private Live version."))
                         Button(copy(de: "Eigenen API-Key verwenden", en: "Use my API key")) {
-                            preferences.cloudVoiceMode = .parentKey
+                            preferences.selectCloudVoiceMode(.parentKey)
                         }
                     }
                 }
@@ -261,7 +200,7 @@ struct ParentSettingsView: View {
                         destination: ProjectLinks.issueTracker,
                         label: {
                             Label(
-                                copy(de: "Problem oder Idee melden", en: "Report an issue or idea"),
+                                copy(de: "Problem auf GitHub melden", en: "Report an issue on GitHub"),
                                 systemImage: "exclamationmark.bubble"
                             )
                         }
@@ -280,8 +219,8 @@ struct ParentSettingsView: View {
                     Text(copy(de: "Open Source & Hilfe", en: "Open source & help"))
                 } footer: {
                     Text(copy(
-                        de: "GitHub-Issues sind öffentlich. Dort niemals API-Keys, Namen, Sprachaufnahmen oder andere Daten eines Kindes einfügen. Sicherheitslücken bitte nur über die private Meldung senden.",
-                        en: "GitHub issues are public. Never include API keys, names, voice recordings, or other child data. Please use the private report for security vulnerabilities."
+                        de: "ZeitHeld ist ein Open-Source-Experiment. GitHub-Issues sind öffentlich. Dort niemals API-Keys, Namen, Sprachaufnahmen oder andere Daten eines Kindes einfügen. Sicherheitslücken bitte nur über die private Meldung senden.",
+                        en: "Time Hero is an open-source experiment. GitHub issues are public. Never include API keys, names, voice recordings, or other child data. Please use the private report for security vulnerabilities."
                     ))
                 }
                 }
@@ -340,6 +279,97 @@ struct ParentSettingsView: View {
             case .agreement: ParentAgreementView(preferences: preferences)
             case .accountDeletion: ParentAccountDeletionView(preferences: preferences)
             }
+        }
+    }
+
+    private var onlineAccessSection: some View {
+        Section {
+            Picker(copy(de: "Online-Zugang", en: "Online access"), selection: Binding(
+                get: { preferences.cloudVoiceMode },
+                set: { mode in
+                    preferences.selectCloudVoiceMode(mode)
+                    showingPrivateKey = mode == .parentKey
+                }
+            )) {
+                Text(copy(de: "5 Gratisminuten", en: "5 free minutes")).tag(CloudVoiceMode.managedAccount)
+                Text(copy(de: "Eigener API-Key", en: "Own API key")).tag(CloudVoiceMode.parentKey)
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("online-access-picker")
+            if preferences.cloudVoiceMode == .parentKey {
+                Text(copy(de: "Du verwendest deinen eigenen OpenAI-Zugang. Die 5 Gratisminuten des Elternkontos werden dabei nicht verbraucht.", en: "You are using your own OpenAI access. This does not spend your parent account’s 5 free minutes."))
+            } else {
+                Text(copy(de: "Einmalig 5 Minuten kostenlos nach Apple-Anmeldung. Danach kannst du mit einem eigenen API-Key weitermachen. Keine automatische Zahlung.", en: "Get 5 free minutes once after Apple sign-in. Afterwards, you can continue with your own API key. No automatic charges."))
+            }
+        } header: {
+            Text(copy(de: "Gratis testen oder eigenen Key nutzen", en: "Try free or bring your own key"))
+        } footer: {
+            Text(copy(de: "ZeitHeld ist ein Open-Source-Experiment. Offline üben bleibt kostenlos und ohne Anmeldung möglich.", en: "Time Hero is an open-source experiment. Offline practice stays free and needs no sign-in."))
+        }
+    }
+
+    @ViewBuilder
+    private var privateKeySection: some View {
+        Section {
+            Button {
+                showingPrivateKey.toggle()
+            } label: {
+                HStack {
+                    Text(copy(de: "Eigenen API-Key hinzufügen", en: "Add your own API key"))
+                    Spacer()
+                    Image(systemName: showingPrivateKey ? "chevron.up" : "chevron.down")
+                }
+            }
+            .accessibilityIdentifier("private-key-disclosure")
+        }
+        if showingPrivateKey {
+        Section {
+            LabeledContent(copy(de: "API-Endpunkt", en: "API endpoint"), value: "api.openai.com/v1")
+            SecureField(copy(de: "OpenAI API-Key", en: "OpenAI API key"), text: $apiKeyDraft)
+                .textContentType(.password)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .privacySensitive()
+                .accessibilityIdentifier("api-key-field")
+
+            Button(preferences.hasStoredAPIKey
+                   ? copy(de: "Key ersetzen", en: "Replace key")
+                   : copy(de: "Key speichern und verwenden", en: "Save and use key")) {
+                storeAPIKey()
+            }
+            .disabled(apiKeyDraft.isEmpty)
+            .accessibilityIdentifier("api-key-save")
+
+            if preferences.hasStoredAPIKey {
+                Label(
+                    copy(de: "Im iOS-Schlüsselbund gespeichert", en: "Stored in iOS Keychain"),
+                    systemImage: "lock.shield.fill"
+                )
+                .foregroundStyle(.green)
+
+                Button(copy(de: "Key löschen", en: "Delete key"), role: .destructive) {
+                    deleteAPIKey()
+                }
+                .accessibilityIdentifier("api-key-delete")
+            }
+
+            Link(
+                copy(de: "OpenAI API-Key erstellen", en: "Create an OpenAI API key"),
+                destination: URL(string: "https://platform.openai.com/api-keys")!
+            )
+            Link(
+                copy(de: "API-Guthaben und Kosten verwalten", en: "Manage API credits and billing"),
+                destination: URL(string: "https://platform.openai.com/settings/organization/billing/overview")!
+            )
+        } header: {
+            Text(copy(de: "Dein OpenAI-Zugang", en: "Your OpenAI access"))
+        } footer: {
+            Text(copy(
+                de: "Keine Apple-Anmeldung nötig. Dein Key bleibt im geschützten Schlüsselbund dieses Geräts und geht nur direkt an OpenAI. Einmal pro Gerät eingeben. OpenAI rechnet die Nutzung separat ab; sie ist nicht Teil der 5 Gratisminuten. Erlaube danach die gewünschten Funktionen unter Datenschutz und Berechtigungen.",
+                en: "No Apple sign-in needed. Your key stays in this device’s protected Keychain and is sent directly to OpenAI only. Enter it once per device. OpenAI bills this usage separately; it is not part of the 5 free minutes. Then allow your chosen features under Privacy and permissions."
+            ))
+        }
+
         }
     }
 
@@ -413,9 +443,9 @@ struct ParentSettingsView: View {
     private func storeAPIKey() {
         do {
             try preferences.storeAPIKey(apiKeyDraft)
-            // This explicit developer action selects the private route;
+            // This explicit action selects the own-key route;
             // cloud-feature consent remains a separate opt-in.
-            preferences.cloudVoiceMode = .parentKey
+            preferences.selectCloudVoiceMode(.parentKey)
             apiKeyDraft = ""
         } catch {
             errorMessage = keychainMessage(for: error)
@@ -525,8 +555,8 @@ struct SupervisedUseTermsView: View {
                 de: "Beim Gespräch mit deinem Zeithelden werden Audio und Gesprächsinhalte von OpenAI verarbeitet. Heldenideen und Bilder werden für Transkription, Moderation oder Bilderstellung verarbeitet. Keine echten Namen, Adressen, Schulen oder anderen privaten Informationen eingeben. Die Datenschutzhinweise erklären die Verarbeitung genauer.",
                 en: "During a conversation with your Time Hero, OpenAI processes audio and conversation content. Hero ideas and images are processed for transcription, moderation or image generation. Do not enter real names, addresses, schools or other private information. The privacy notice explains the processing in more detail.")
             termsRow(icon: "creditcard",
-                de: "Das Elternkonto bietet einmalig zehn Testminuten, gemeinsam für alle Geräte und Kinderprofile. Es gibt keine automatische Zahlung. Weitere Nutzungslimits können gelten. Bei einem eigenen API-Key im privaten Entwickler-Modus rechnet der Anbieter mögliche Kosten separat ab.",
-                en: "A parent account receives one ten-minute trial shared across devices and child profiles. There are no automatic charges. Additional usage limits may apply. A personal API key in private developer mode may incur separate provider charges.")
+                de: "Das Elternkonto bietet einmalig fünf Testminuten, gemeinsam für alle Geräte und Kinderprofile. Es gibt keine automatische Zahlung. Weitere Nutzungslimits können gelten. Alternativ kannst du einen eigenen API-Key verwenden; dessen Nutzung wird separat vom Anbieter abgerechnet.",
+                en: "A parent account receives one five-minute trial shared across devices and child profiles. There are no automatic charges. Additional usage limits may apply. Alternatively, bring your own API key; the provider bills its usage separately.")
             termsRow(icon: "stop.circle",
                 de: "Mit Stopp endet das Gespräch. In den Einstellungen können die Reise des ausgewählten Kindes zurückgesetzt, lokale Heldenbilder entfernt und das Elternkonto gelöscht werden. Diese Beta-Hinweise ersetzen weder Apples Bedingungen noch separate Open-Source-Lizenzen.",
                 en: "Stop ends the conversation. Settings can reset the selected child's journey, remove local hero pictures and delete the parent account. These beta terms do not replace Apple's terms or separate open-source licenses.")

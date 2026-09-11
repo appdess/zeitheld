@@ -4,6 +4,8 @@ export class AppError extends Error {
   constructor(code, status = 400) { super(code); this.code = code; this.status = status; }
 }
 export const hash = value => createHash('sha256').update(value).digest('hex');
+export const TRIAL_SECONDS = 5 * 60;
+export const remainingTrialSeconds = account => Math.max(0, TRIAL_SECONDS - (account?.usedSeconds ?? 0));
 export function identity(auth, secret, unlimitedEmailHash) {
   const apple = auth.firebase?.identities?.['apple.com']?.[0];
   if (!apple || auth.firebase?.sign_in_provider !== 'apple.com') throw new AppError('apple_sign_in_required', 403);
@@ -18,7 +20,7 @@ export function identity(auth, secret, unlimitedEmailHash) {
 export function reserveTrial(account, { now, sessionID, unlimited, maxSeconds = 600 }) {
   if (account?.active) throw new AppError('session_already_active', 409);
   const usedSeconds = account?.usedSeconds ?? 0;
-  const seconds = unlimited ? maxSeconds : Math.min(maxSeconds, Math.max(0, 600 - usedSeconds));
+  const seconds = unlimited ? maxSeconds : Math.min(maxSeconds, remainingTrialSeconds(account));
   if (seconds < 15) throw new AppError('trial_exhausted', 402);
   return {
     usedSeconds: usedSeconds + (unlimited ? 0 : seconds),

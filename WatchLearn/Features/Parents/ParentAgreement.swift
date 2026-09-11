@@ -1,7 +1,7 @@
 import Foundation
 
 struct ParentAgreement: Codable, Equatable, Sendable {
-    static let currentVersion = "2026-09-11.1"
+    static let currentVersion = "2026-09-11.2"
     var version = currentVersion
     var locale: String
     var guardian = false

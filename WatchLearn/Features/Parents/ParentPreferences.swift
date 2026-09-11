@@ -167,6 +167,10 @@ final class ParentPreferences {
     func deleteAPIKey() throws {
         try secureStore.removeValue(for: Keys.apiKey)
         hasStoredAPIKey = false
+        if cloudVoiceMode == .parentKey {
+            hasCloudVoiceConsent = false
+            hasHeroGenerationConsent = false
+        }
         invalidateConnectionCheck()
     }
 
@@ -224,6 +228,15 @@ final class ParentPreferences {
 
     func revokeCloudConsent() {
         hasCloudVoiceConsent = false
+    }
+
+    /// Switching who supplies online access stops current work. Permissions are
+    /// explicitly reviewed again before requests can use the selected route.
+    func selectCloudVoiceMode(_ mode: CloudVoiceMode) {
+        guard cloudVoiceMode != mode else { return }
+        hasCloudVoiceConsent = false
+        hasHeroGenerationConsent = false
+        cloudVoiceMode = mode
     }
 
     func revokeHeroGenerationConsent() {

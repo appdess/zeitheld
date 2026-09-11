@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { AppError } from './policy.js';
 
 // Change this when the notice, purposes, recipients or beta terms change.
-export const AGREEMENT_VERSION = '2026-09-11.1';
+export const AGREEMENT_VERSION = '2026-09-11.2';
 export const accessRef = (db, who) => db.collection('parentAccess').doc(who.uid);
 
 export function consentInput(input) {

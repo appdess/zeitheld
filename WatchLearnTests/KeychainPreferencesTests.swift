@@ -33,9 +33,13 @@ final class KeychainPreferencesTests: XCTestCase {
         XCTAssertEqual(try preferences.apiKeyForEphemeralTokenRequest(), "sk-test-abcdefghijklmnopqrstuvwxyz")
         XCTAssertNil(defaults.string(forKey: "openai-api-key"))
 
+        preferences.cloudVoiceMode = .parentKey
+        preferences.hasCloudVoiceConsent = true
+        preferences.hasHeroGenerationConsent = true
         try preferences.deleteAPIKey()
         XCTAssertFalse(preferences.hasStoredAPIKey)
         XCTAssertNil(try preferences.apiKeyForEphemeralTokenRequest())
+        XCTAssertFalse(preferences.hasAnyOnlineFeatureEnabled)
     }
 
     func testRejectsInvalidKeyWithoutPersistingIt() throws {

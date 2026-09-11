@@ -5,7 +5,7 @@
 # ZeitHeld · Time Hero
 
 A playful iPhone and iPad app for learning to read an analog clock, in German
-and English. Built as a personal family project and shared under the MIT license.
+and English. Built as an open-source experiment and shared under the MIT license.
 
 [![iOS CI](https://github.com/appdess/zeitheld/actions/workflows/ci.yml/badge.svg)](https://github.com/appdess/zeitheld/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/appdess/zeitheld/actions/workflows/codeql.yml/badge.svg)](https://github.com/appdess/zeitheld/actions/workflows/codeql.yml)
@@ -80,9 +80,19 @@ The unusual URL spelling avoids xcconfig treating `//` as a comment. Firebase
 client configuration is public configuration rather than an administrator secret;
 we omit the maintainer's configuration so forks do not target the hosted service.
 
-Debug builds also offer a private API-key option. Keys stay in the device-only
-Keychain and are not synchronized from the Mac. It is intended for adult testing
-and has separate provider billing. Release Settings hides key entry.
+Settings offers two ways to try the online features, in Debug and Release builds:
+
+- **Sign in with Apple:** one five-minute voice trial per Apple account, shared
+  across devices and child profiles. Existing consumed time is preserved; there
+  are no automatic charges. Hosted access remains subject to the beta gate above.
+- **Bring your own API key:** no Apple sign-in required. Add your OpenAI key in
+  Settings, then review privacy and enable the desired features. The key stays in
+  the device-only Keychain, is not synchronized from the Mac and is sent directly
+  to OpenAI, never to the ZeitHeld backend. OpenAI bills this usage separately.
+
+The API-key route uses the native OpenAI Live endpoint. To run your own ZeitHeld
+backend instead, configure its HTTPS service URL in `Secrets.xcconfig` as above;
+that backend requires its own matching Firebase and Apple sign-in configuration.
 
 ## Tests and security
 

@@ -26,12 +26,47 @@ final class WatchLearnUITests: XCTestCase {
     }
 
     private func revealPrivateKey(_ app: XCUIApplication) {
+        // Start from the top of a fresh Settings sheet, regardless of the
+        // preceding permissions/language scroll position or expanded state.
+        app.buttons["settings-done-button"].tap()
+        app.buttons["parent-settings-button"].tap()
         let disclosure = app.buttons["private-key-disclosure"]
-        for _ in 0..<8 where !disclosure.isHittable { app.swipeUp() }
-        XCTAssertTrue(disclosure.isHittable)
+        scrollTo(disclosure, in: app)
         disclosure.tap()
         let key = app.secureTextFields["api-key-field"]
-        for _ in 0..<4 where !key.isHittable { app.swipeUp() }
+        scrollTo(key, in: app)
+    }
+
+    func testFiveMinuteTrialAndOwnKeyAreAvailableWithoutSigningIn() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--english", "-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-parent.language", "en", "-parent.follows-device-language", "NO"]
+        app.launch()
+        app.buttons["parent-settings-button"].tap()
+        let intro = app.staticTexts["free-trial-introduction"]
+        XCTAssertTrue(intro.waitForExistence(timeout: 5))
+        XCTAssertTrue(intro.label.contains("5 free minutes"))
+        let picker = app.segmentedControls["online-access-picker"]
+        scrollTo(picker, in: app)
+        picker.buttons["Own API key"].tap()
+        // This also runs against Release, where fixture/reset switches are absent.
+        let field = app.secureTextFields["api-key-field"]
+        revealPrivateKey(app)
+        scrollTo(field, in: app)
+        field.tap()
+        field.typeText("sk-fixture-never-real-release-1234567890")
+        app.buttons["api-key-save"].tap()
+        XCTAssertTrue(app.staticTexts["Stored in iOS Keychain"].exists)
+        // Verify the saved key can also be removed after leaving Settings.
+        revealPrivateKey(app)
+        let delete = app.buttons["api-key-delete"]
+        scrollTo(delete, in: app)
+        delete.tap()
+        XCTAssertFalse(delete.exists)
+        let issues = app.buttons["report-issue-link"]
+        scrollTo(issues, in: app)
+        XCTAssertTrue(issues.label.contains("GitHub"))
+        app.buttons["settings-done-button"].tap()
+        XCTAssertTrue(app.buttons["voice-coach-button"].isHittable)
     }
 
     func testBetaTermsAreAvailableInBothLanguagesAndReturnToSettings() throws {
@@ -41,11 +76,10 @@ final class WatchLearnUITests: XCTestCase {
         app.buttons["parent-settings-button"].tap()
         for (linkTitle, pageTitle) in [("Beta terms of use", "Beta use"), ("Nutzungsbedingungen der Beta", "Beta-Nutzung")] {
             if pageTitle == "Beta-Nutzung" {
+                app.buttons["settings-done-button"].tap()
+                app.buttons["parent-settings-button"].tap()
                 let picker = app.segmentedControls["language-picker"]
-                for _ in 0..<10 where !picker.isHittable { app.swipeDown() }
-                // A hittable segment can still be clipped by the sheet edge.
-                // Bring the complete control into the body before selecting it.
-                app.swipeDown()
+                scrollTo(picker, in: app, fullyVisible: true)
                 picker.buttons["Deutsch"].tap()
                 XCTAssertTrue(app.navigationBars["Einstellungen"].waitForExistence(timeout: 3))
             }
@@ -176,12 +210,27 @@ final class WatchLearnUITests: XCTestCase {
         XCTAssertTrue(app.buttons["next-question-button"].exists)
     }
 
-    private func scrollTo(_ element: XCUIElement, in app: XCUIApplication) {
+    private func scrollTo(_ element: XCUIElement, in app: XCUIApplication, fullyVisible: Bool = false) {
+        func visibleBounds() -> ClosedRange<CGFloat> {
+            let navigation = app.navigationBars.firstMatch
+            let top = navigation.exists ? navigation.frame.maxY + 8 : app.frame.minY + 100
+            return top...(app.frame.maxY - 90)
+        }
         for _ in 0..<18 {
-            if element.exists && element.isHittable { break }
+            if element.exists {
+                if element.isHittable && !fullyVisible { return }
+                let frame = element.frame, bounds = visibleBounds()
+                if element.isHittable && frame.minY >= bounds.lowerBound && frame.maxY <= bounds.upperBound {
+                    return
+                }
+                if !frame.isEmpty && frame.minY < bounds.lowerBound {
+                    app.swipeDown()
+                    continue
+                }
+            }
             app.swipeUp()
         }
-        XCTAssertTrue(element.isHittable)
+        XCTFail("Control did not become visible: \(element.identifier)")
     }
 
     private func acceptFixtureAgreement(_ app: XCUIApplication, voice: Bool, hero: Bool = false) {
@@ -191,8 +240,10 @@ final class WatchLearnUITests: XCTestCase {
             + (voice ? ["agreement-voice"] : []) + (hero ? ["agreement-hero"] : [])
             + (voice || hero ? ["agreement-adult-test"] : []) {
             let toggle = app.switches[id]
-            scrollTo(toggle, in: app)
+            scrollTo(toggle, in: app, fullyVisible: true)
             toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+            let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '1'"), object: toggle)
+            XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 3), .completed, "Permission did not turn on: \(id)")
         }
         let confirm = app.buttons["agreement-confirm"]
         scrollTo(confirm, in: app)
@@ -273,6 +324,7 @@ final class WatchLearnUITests: XCTestCase {
         for _ in 0..<5 where !label.isHittable { app.swipeUp() }
         XCTAssertTrue(label.waitForExistence(timeout: 3))
         XCTAssertTrue(label.isHittable)
+        scrollTo(app.buttons["live-connection-check"], in: app)
         XCTAssertTrue(app.buttons["live-connection-check"].exists)
         XCTAssertFalse(app.buttons["live-connection-check"].isEnabled)
         XCTAssertFalse(app.staticTexts["live-connection-success"].exists)
@@ -367,7 +419,7 @@ final class WatchLearnUITests: XCTestCase {
 
         app.buttons["parent-settings-button"].tap()
         let languagePicker = app.segmentedControls["language-picker"]
-        scrollTo(languagePicker, in: app)
+        scrollTo(languagePicker, in: app, fullyVisible: true)
         XCTAssertTrue(languagePicker.waitForExistence(timeout: 3))
         languagePicker.buttons["Deutsch"].tap()
 

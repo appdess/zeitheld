@@ -74,8 +74,10 @@ force-push, and unreviewed direct updates; a protected `release` environment
 restricted to `main` and requiring approval by a reviewer other than the
 workflow initiator; a `refs/tags/v*` ruleset that restricts creation, update,
 deletion, and non-fast-forward changes; and GitHub immutable releases. None is considered proven active until its
-repository setting is read back from GitHub. The initial reviewed source import
-bootstraps main; protections apply before subsequent ordinary updates. Publishing
+repository setting is read back from GitHub. During local maintainer development,
+validated source updates may be pushed directly to main; deletion and force-push
+protection remain active. Required hosted checks and reviewed updates must be
+restored and verified before a launch or binary release. Publishing
 source does not authorize a binary release or enable public child cloud access.
 
 Private Vulnerability Reporting, GitHub secret scanning, and push protection are

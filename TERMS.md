@@ -1,6 +1,6 @@
 # ZeitHeld beta terms / Beta-Nutzungsbedingungen
 
-Version: 2026-09-11.1 (11 September 2026). Applies to the current private beta access.
+Version: 2026-09-11.2 (11 September 2026). Applies to the current private beta access.
 
 ## English
 
@@ -14,9 +14,9 @@ The beta is provided as is and as available. To the extent permitted by law, no 
 
 These terms do not exclude mandatory liability, including liability for intent, gross negligence or injury to life, body or health. They do not limit privacy rights.
 
-When the online coach is active, OpenAI processes audio and conversation content. Hero ideas and images are processed for transcription, moderation or image generation. Do not enter real names, addresses, schools or other private information. The privacy notice explains the processing in more detail.
+When your online Time Hero is active, OpenAI processes audio and conversation content. Hero ideas and images are processed for transcription, moderation or image generation. Do not enter real names, addresses, schools or other private information. The privacy notice explains the processing in more detail.
 
-A parent account receives one ten-minute trial shared across devices and child profiles. There are no automatic charges. Additional usage limits may apply. A personal API key in private developer mode may incur separate provider charges.
+A parent account receives one five-minute trial shared across devices and child profiles. There are no automatic charges. Additional usage limits may apply. Alternatively, bring your own API key; the provider bills its usage separately.
 
 Stop ends the conversation. Settings can reset the selected child's journey, remove local hero pictures and delete the parent account. These beta terms do not replace Apple's terms or separate open-source licenses.
 
@@ -32,9 +32,9 @@ Die Beta wird im vorhandenen Zustand und nach Verfügbarkeit bereitgestellt. Sow
 
 Diese Hinweise schließen keine zwingende Haftung aus, insbesondere nicht für Vorsatz, grobe Fahrlässigkeit oder Schäden an Leben, Körper oder Gesundheit. Datenschutzrechte werden nicht eingeschränkt.
 
-Bei aktivem Online-Coach werden Audio und Gesprächsinhalte von OpenAI verarbeitet. Heldenideen und Bilder werden für Transkription, Moderation oder Bilderstellung verarbeitet. Keine echten Namen, Adressen, Schulen oder anderen privaten Informationen eingeben. Die Datenschutzhinweise erklären die Verarbeitung genauer.
+Beim Gespräch mit deinem Zeithelden werden Audio und Gesprächsinhalte von OpenAI verarbeitet. Heldenideen und Bilder werden für Transkription, Moderation oder Bilderstellung verarbeitet. Keine echten Namen, Adressen, Schulen oder anderen privaten Informationen eingeben. Die Datenschutzhinweise erklären die Verarbeitung genauer.
 
-Das Elternkonto bietet einmalig zehn Testminuten, gemeinsam für alle Geräte und Kinderprofile. Es gibt keine automatische Zahlung. Weitere Nutzungslimits können gelten. Bei einem eigenen API-Key im privaten Entwickler-Modus rechnet der Anbieter mögliche Kosten separat ab.
+Das Elternkonto bietet einmalig fünf Testminuten, gemeinsam für alle Geräte und Kinderprofile. Es gibt keine automatische Zahlung. Weitere Nutzungslimits können gelten. Alternativ kannst du einen eigenen API-Key verwenden; dessen Nutzung wird separat vom Anbieter abgerechnet.
 
 Mit Stopp endet das Gespräch. In den Einstellungen können die Reise des ausgewählten Kindes zurückgesetzt, lokale Heldenbilder entfernt und das Elternkonto gelöscht werden. Diese Beta-Hinweise ersetzen weder Apples Bedingungen noch separate Open-Source-Lizenzen.
 

@@ -1,4 +1,4 @@
-import { AppError, reserveTrial, settleTrial } from './policy.js';
+import { AppError, remainingTrialSeconds, reserveTrial, settleTrial } from './policy.js';
 import { requireAccess } from './parent-access.js';
 
 export class Ledger {
@@ -6,7 +6,7 @@ export class Ledger {
   ref(identity) { return this.db.collection('trialLedgers').doc(identity.ledgerID); }
   async account(identity) {
     const data = (await this.ref(identity).get()).data();
-    const remaining = Math.max(0, 600 - (data?.usedSeconds ?? 0));
+    const remaining = remainingTrialSeconds(data);
     return { unlimited: identity.unlimited, remainingSeconds: identity.unlimited ? null : remaining >= 15 ? remaining : 0, active: Boolean(data?.active) };
   }
   async reserve(identity, sessionID, maxSeconds) {

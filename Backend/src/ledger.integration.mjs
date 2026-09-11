@@ -26,10 +26,10 @@ try {
  console.log('Admission results',results.map(r=>r.status==='fulfilled'?'admitted':(r.reason.code??r.reason.message)));
  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
  const index=results.findIndex(r=>r.status==='fulfilled'),id=ids[index];
- assert.equal((await ledger.account(who)).remainingSeconds,570);
+ assert.equal((await ledger.account(who)).remainingSeconds,270);
  assert.equal((await db.collection('liveSessions').doc(id).get()).data().status,'creating');
  await Promise.all([ledger.settle(who,id,12.2),ledger.settle(who,id,12.2)]);
- assert.equal((await ledger.account(who)).remainingSeconds,587);
+ assert.equal((await ledger.account(who)).remainingSeconds,287);
  assert.equal((await ledger.account(who)).active,false);
  const id2=randomUUID();ids.push(id2);
  await ledger.reserve(who,id2,600);

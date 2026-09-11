@@ -56,7 +56,7 @@ test('no consent and withdrawn purpose block both voice and hero admission witho
   await assert.rejects(reserveHero(db,who,'image'),e=>e.code==='agreement_required');
   assert.equal(db.rows.get('trialLedgers/synthetic-family'),undefined);
   await ledger.reserve(who,'allowed-voice',30);
-  assert.equal((await ledger.account(who)).remainingSeconds,570);
+  assert.equal((await ledger.account(who)).remainingSeconds,270);
 });
 test('previously authenticated delayed work is denied after deletion; consent cannot resurrect deleting/deleted account',async()=>{
   const db = await setup(), ledger = new Ledger(db);
@@ -71,7 +71,7 @@ test('previously authenticated delayed work is denied after deletion; consent ca
   await assert.rejects(saveConsent(db,who,agreement),e=>e.code==='account_deleted');
   await revokeAccess(db,who); // Withdrawal must never remove a deletion tombstone.
   await assert.rejects(saveConsent(db,who,agreement),e=>e.code==='account_deleted');
-  assert.equal((await ledger.account(who)).remainingSeconds,600);
+  assert.equal((await ledger.account(who)).remainingSeconds,300);
 });
 test('withdrawal prevents activation checks and retains in-flight hero work until cleanup',async()=>{
   const db = await setup();

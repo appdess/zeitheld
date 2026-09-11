@@ -1,6 +1,6 @@
 # ZeitHeld privacy notice — pre-release build
 
-Updated: 11 September 2026. This describes build 12 and the managed backend implementation. Deployment verification is recorded separately.
+Updated: 11 September 2026. This describes build 13 and the managed backend implementation. Deployment verification is recorded separately.
 Public cloud access remains disabled pending the release requirements below.
 
 ## Learning on the device
@@ -32,7 +32,7 @@ The app does not receive an Apple password.
 The ZeitHeld backend verifies Firebase tokens and Apple sign-in before allowing
 cloud operations. It keeps a keyed hash of the stable Apple account identifier,
 trial seconds, active session reservation and request counters. This associates
-the one-time ten-minute voice trial across devices and local child profiles.
+the one-time five-minute voice trial across devices and local child profiles.
 An explicitly designated verified adult test account has unlimited test access,
 subject to per-session and service-wide limits. There are no automatic payments.
 
@@ -122,10 +122,14 @@ Google Secret Manager. It is not embedded in the app. The app contains public
 Firebase configuration and stores its own authentication credentials through the
 Firebase SDK.
 
-A development-only private-key option remains for adult testing. Such a key is
-stored in the non-synchronizing iOS Keychain, accessible while unlocked, and can
-be deleted in Settings. That route calls OpenAI directly. The public Release
-settings screen does not offer private-key entry.
+Debug and Release Settings offer an own-API-key option for adult testing without
+Apple sign-in. The key is stored in the non-synchronizing iOS Keychain, accessible
+while unlocked, and can be deleted in Settings. That route sends voice over
+encrypted WebSocket and hero requests directly to OpenAI. It does not send the
+key, conversation or hero requests to the ZeitHeld backend. Its permission
+confirmation remains local unless it is linked to a parent account. Provider
+billing is separate from the managed five-minute trial. The cloud data flows
+described above apply to the managed account route.
 
 Live and answer-extraction requests use `store: false`. This does not establish
 Zero Data Retention. The production OpenAI project's Zero Data Retention status

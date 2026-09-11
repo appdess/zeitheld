@@ -15,6 +15,18 @@ read an analog clock, and welcoming, practical contributions are encouraged.
 Please open an issue before a large architectural change. Small fixes can go
 straight to a pull request.
 
+## Current maintainer workflow
+
+While the app is being developed, maintainers iterate, test, commit and build
+locally. Intermediate edits do not need a pull request or a remote CI run.
+After local validation, publish the final result in one consolidated push.
+Main permits these direct development updates while protecting against deletion
+and force pushes. CI on the final push provides follow-up feedback.
+
+Outside contributions still use pull requests. Required hosted checks and
+reviewed updates become mandatory before launch or binary publication, as
+described under Maintainer releases below.
+
 ## Local setup
 
 1. Install Xcode 26.2+.

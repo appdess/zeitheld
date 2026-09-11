@@ -1,0 +1,15 @@
+name: Private conduct contact handoff
+description: Ask the maintainer to provide a private channel without publishing incident details.
+title: "[Conduct contact] Please provide a private reporting channel"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not describe the incident here. This issue is public and exists only so the maintainer can provide a private reporting channel.
+  - type: checkboxes
+    id: no_private_details
+    attributes:
+      label: Public-information check
+      options:
+        - label: I have not included child data, credentials, names, recordings, private incident details, or other sensitive information.
+          required: true

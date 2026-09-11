@@ -1,0 +1,8 @@
+.gcloudignore
+.git
+.env
+.env.*
+node_modules
+*.log
+src/*.test.js
+src/*.integration.mjs

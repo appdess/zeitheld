@@ -1,0 +1,3 @@
+"CFBundleDisplayName" = "Time Hero";
+"NSMicrophoneUsageDescription" = "The microphone lets your child answer the clock coach or describe an original hero. During supervised use, audio is sent to OpenAI only for a visible voice action enabled in Settings.";
+"NSCameraUsageDescription" = "ZeitHeld uses voice-only calls. Its calling library includes camera APIs, but ZeitHeld does not enable or request camera access.";

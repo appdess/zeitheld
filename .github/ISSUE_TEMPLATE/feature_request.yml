@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest a child-friendly learning or project improvement.
+title: "[Idea]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Learning need or problem
+      description: What would become easier or more fun?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed experience
+      description: Keep the idea privacy-respecting, age-appropriate, and usable offline where possible.
+    validations:
+      required: true
+  - type: checkboxes
+    id: originality
+    attributes:
+      label: Content check
+      options:
+        - label: This proposal does not require a copied character, logo, or unclear third-party asset.
+          required: true

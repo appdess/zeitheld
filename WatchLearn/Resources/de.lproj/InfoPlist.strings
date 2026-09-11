@@ -1,0 +1,3 @@
+"CFBundleDisplayName" = "ZeitHeld";
+"NSMicrophoneUsageDescription" = "Das Mikrofon ermöglicht Ihrem Kind, dem Uhrzeit-Coach zu antworten oder einen eigenen Helden zu beschreiben. Bei beaufsichtigter Nutzung wird Audio nur für eine in den Einstellungen aktivierte, sichtbare Sprachaktion an OpenAI gesendet.";
+"NSCameraUsageDescription" = "ZeitHeld verwendet reine Sprachverbindungen. Die Verbindungsbibliothek enthält Kamera-APIs, aber ZeitHeld aktiviert die Kamera nicht und fordert keinen Kamerazugriff an.";

@@ -1,0 +1,33 @@
+.DS_Store
+DerivedData/
+.build/
+build/
+dist/
+.tools/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+Secrets.xcconfig
+WatchLearn/Resources/GoogleService-Info.plist
+.firebaserc
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+
+# Generated test artifacts
+Artifacts/
+TestResults/
+*.xcresult
+screenshots/
+SecurityReports/
+*.log
+node_modules/
+.firebase/
+Backend/.env*

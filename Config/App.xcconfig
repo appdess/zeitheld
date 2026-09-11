@@ -1,0 +1,3 @@
+// A fresh checkout runs offline. Configure your own backend locally.
+ZEITHELD_SERVICE_URL =
+#include? "../Secrets.xcconfig"

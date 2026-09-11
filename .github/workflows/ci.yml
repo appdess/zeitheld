@@ -1,0 +1,143 @@
+name: iOS CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+  WATCHLEARN_RUN_LIVE_REALTIME: "0"
+  WATCHLEARN_RUN_LIVE_HERO: "0"
+  WATCHLEARN_RUN_AUDIO_ENGINE_SMOKE: "0"
+
+jobs:
+  backend:
+    name: Backend tests and dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Backend/package-lock.json
+      - name: Validate backend
+        working-directory: Backend
+        run: |
+          npm ci --ignore-scripts
+          npm test
+          npm audit --omit=dev --audit-level=moderate
+
+  tests:
+    name: Unit and UI tests
+    runs-on: macos-26-intel
+    timeout-minutes: 45
+    steps:
+      - name: Check out
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install pinned XcodeGen
+        run: |
+          ./Scripts/install-xcodegen.sh
+          echo "$PWD/.tools/xcodegen/bin" >> "$GITHUB_PATH"
+
+      - name: Verify source hygiene
+        run: |
+          ./Scripts/security-check.sh
+          ./Scripts/test-release-guards.sh
+
+      - name: Generate project and reject drift
+        run: |
+          xcodebuild -version
+          xcodegen generate
+          git diff --exit-code -- WatchLearn.xcodeproj
+          test -z "$(git status --porcelain --untracked-files=all -- WatchLearn.xcodeproj)"
+
+      - name: Run complete deterministic suite
+        run: |
+          mkdir -p TestResults
+          xcodebuild test \
+            -project WatchLearn.xcodeproj \
+            -scheme WatchLearn \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' \
+            -resultBundlePath TestResults/WatchLearn.xcresult \
+            -parallel-testing-enabled NO \
+            -enableCodeCoverage YES
+
+      - name: Upload failed test result
+        if: failure()
+        run: |
+          if [[ -d TestResults/WatchLearn.xcresult ]]; then
+            xcrun xcresulttool get test-results summary \
+              --path TestResults/WatchLearn.xcresult \
+              > TestResults/summary.json
+          fi
+
+      - name: Upload sanitized failed-test summary
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: failed-xcode-tests-${{ github.run_attempt }}
+          path: TestResults/summary.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  release-audit:
+    name: Analyze and Release build
+    runs-on: macos-26-intel
+    timeout-minutes: 35
+    steps:
+      - name: Check out
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install pinned XcodeGen
+        run: |
+          ./Scripts/install-xcodegen.sh
+          echo "$PWD/.tools/xcodegen/bin" >> "$GITHUB_PATH"
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Static analyze
+        run: |
+          xcodebuild analyze \
+            -project WatchLearn.xcodeproj \
+            -scheme WatchLearn \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: Build signed Release and check signature and test markers
+        run: |
+          derived="$RUNNER_TEMP/ReleaseDerivedData"
+          xcodebuild build \
+            -project WatchLearn.xcodeproj \
+            -scheme WatchLearn \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$derived"
+          app="$derived/Build/Products/Release-iphonesimulator/ZeitHeld.app"
+          codesign --verify --deep --strict "$app"
+          test "$(defaults read "$app/Info" CFBundleIdentifier)" = \
+            "com.dessdynamics.watchlearn"
+          ./Scripts/verify-release-binary.sh "$app/ZeitHeld"

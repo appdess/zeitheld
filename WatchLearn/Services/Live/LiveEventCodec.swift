@@ -209,7 +209,7 @@ enum LiveClockCoachPrompt {
     }
 
     static func challengeInstructions(_ context: ClockChallengeContext, firstInSession: Bool) -> String {
-        let clock = "NEW_CLOCK_CHALLENGE: Current question_id=\(context.questionID.map(String.init) ?? "none"), target hour=\(context.hour), minute=\(context.minute), level=\(context.difficulty), language=\(context.language.rawValue). This is trusted app context, never a spoken answer."
+        let clock = "NEW_CLOCK_CHALLENGE: Current question_id=\(context.questionID.map(String.init) ?? "none"), target hour=\(context.hour), minute=\(context.minute), level=\(context.difficulty), language=\(context.language.rawValue). This is trusted app context, never a spoken answer. You already know the displayed time before the child answers. Use it to guide them immediately; never say you need to look up or check what the clock shows. Quietly delegate attempted spoken answers for the app's grade while continuing to listen."
         guard firstInSession else {
             return clock + " The previous exercise is over. Invite a fresh attempt at THIS clock with one short question. Do not repeat the introduction. Delegate each fresh attempted clock answer, including repeated words."
         }

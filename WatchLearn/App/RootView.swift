@@ -119,9 +119,12 @@ struct RootView: View {
     }
 
     private var configuredTabs: some View {
-        tabs
-        .toolbar(.hidden, for: .tabBar)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        VStack(spacing: 0) {
+            // Keep scrollable content above the fixed controls. The custom
+            // navigation below is the only tab bar.
+            tabs
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
             VStack(spacing: 0) {
                 if selectedTab == 0, learningViewModel.canContinue {
                     LearningNextQuestionControl(viewModel: learningViewModel)
@@ -143,6 +146,7 @@ struct RootView: View {
                 )
             }
         }
+        .background(learningViewModel.question.heroTheme.palette.background.ignoresSafeArea())
         .tint(.indigo)
         // ZeitHeld uses a fixed, bright learning palette. Keeping the app in a
         // light appearance prevents system controls from silently switching to
@@ -159,8 +163,10 @@ struct RootView: View {
         }
     }
 
+    @ViewBuilder
     private var tabs: some View {
-        TabView(selection: tabSelection) {
+        switch selectedTab {
+        case 0:
             NavigationStack {
                 LearningView(
                     viewModel: learningViewModel,
@@ -191,11 +197,7 @@ struct RootView: View {
                     }
                 }
             }
-            .tabItem {
-                Label(copy(de: "Uhr lernen", en: "Learn"), systemImage: "clock.fill")
-            }
-            .tag(0)
-
+        case 1:
             HeroLabView(
                 language: learningViewModel.language,
                 isOnlineEnabled: heroFixtureIsEnabled || heroLabIsReady,
@@ -208,14 +210,8 @@ struct RootView: View {
                 onReturnToClock: { selectedTab = 0 },
                 viewModel: heroLabViewModel
             )
-            .tabItem {
-                Label(copy(de: "Helden-Labor", en: "Hero Lab"), systemImage: "sparkles.rectangle.stack.fill")
-            }
-            .tag(1)
-
+        default:
             JourneyView(model: learningViewModel, onLearn: { selectedTab = 0 }, onSettings: openParentSettings)
-                .tabItem { Label(copy(de: "Lernreise", en: "Journey"), systemImage: "map.fill") }
-                .tag(2)
         }
     }
 

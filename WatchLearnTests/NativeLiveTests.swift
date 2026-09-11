@@ -167,6 +167,9 @@ final class NativeLiveTests: XCTestCase {
         try await service.open(language: .german, safetyIdentifier: .init(stableID: "duplex"))
         try await service.setChallenge(challenge(1, hour: 3))
         let beforeCapture = try await transport.sent.map { try object($0) }
+        XCTAssertTrue(beforeCapture.contains {
+            ($0["content"] as? String)?.contains("Current question_id=1, target hour=3, minute=0") == true
+        }, "The displayed time must be supplied before listening to the first answer")
         XCTAssertFalse(beforeCapture.contains { ($0["content"] as? String)?.hasPrefix("VOICE_READY:") == true })
         try await service.startVoice(authorizedBy: audio.authorizeCaptureStart())
         try await enqueueAnswer(transport, id: "d1", questionID: 1)
@@ -180,6 +183,11 @@ final class NativeLiveTests: XCTestCase {
         XCTAssertEqual(audio.stops, 0)
         try await service.setChallenge(challenge(2, hour: 4))
         let afterNewClock = try await transport.sent.map { try object($0) }
+        XCTAssertTrue(afterNewClock.contains {
+            ($0["content"] as? String)?.contains("Current question_id=2, target hour=4, minute=0") == true
+        }, "The next clock context is supplied on the same connection")
+        XCTAssertEqual(audio.starts, 1)
+        XCTAssertEqual(audio.stops, 0)
         XCTAssertEqual(afterNewClock.filter { ($0["content"] as? String)?.hasPrefix("VOICE_READY:") == true }.count, 1,
                        "Audio-ready greeting is sent once, after capture starts, not for every clock.")
         await grader.finish()

@@ -576,6 +576,7 @@ final class WatchLearnUITests: XCTestCase {
                 "-parent.follows-device-language", "NO"]
             if language == "en" { app.launchArguments.append("--english") }
             app.launch()
+            XCTAssertEqual(app.tabBars.count, 0, "The custom navigation must be the only tab bar")
             let correct = app.buttons["answer-choice-4-0"]
             XCTAssertTrue(correct.waitForExistence(timeout: 5))
             correct.tap()
@@ -584,6 +585,19 @@ final class WatchLearnUITests: XCTestCase {
             XCTAssertTrue(next.waitForExistence(timeout: 5))
             XCTAssertTrue(next.isHittable, "Next must be visible without scrolling")
             XCTAssertLessThanOrEqual(next.frame.maxY, status.frame.minY + 1)
+            let explanation = app.staticTexts["answer-explanation"]
+            let feedback = app.staticTexts["answer-feedback"]
+            let navigation = app.navigationBars.firstMatch
+            let fullyReadable = NSPredicate { _, _ in
+                explanation.exists && feedback.exists
+                    && explanation.frame.maxY <= next.frame.minY
+                    && feedback.frame.minY >= navigation.frame.maxY
+            }
+            expectation(for: fullyReadable, evaluatedWith: nil)
+            waitForExpectations(timeout: 5)
+            XCTAssertTrue(explanation.isHittable)
+            XCTAssertFalse(app.buttons["voice-coach-button"].exists,
+                           "An active conversation needs no second start button")
             let screenshot = XCTAttachment(screenshot: app.screenshot())
             screenshot.name = "visible-next-\(language)"
             screenshot.lifetime = .keepAlways
@@ -591,6 +605,9 @@ final class WatchLearnUITests: XCTestCase {
             next.tap()
             XCTAssertFalse(next.exists)
             XCTAssertFalse(app.staticTexts["answer-feedback"].exists)
+            XCTAssertTrue(app.buttons["voice-stop-button"].isHittable)
+            XCTAssertFalse(app.buttons["voice-coach-button"].exists,
+                           "Next keeps the current conversation active")
             XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "answer-choice-")).firstMatch.isEnabled)
             app.terminate()
         }

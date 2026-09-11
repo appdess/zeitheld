@@ -104,13 +104,13 @@ public struct LearningView: View {
                         scrollProxy.scrollTo("current-clock-scroll-target", anchor: .top)
                     }
                 }
-                .onChange(of: viewModel.selectedAnswer) { _, answer in
-                    guard answer != nil else { return }
-                    Task { @MainActor in
-                        await Task.yield()
-                        withAnimation(.spring(response: 0.38, dampingFraction: 0.84)) {
-                            scrollProxy.scrollTo("answer-feedback-scroll-target", anchor: .bottom)
-                        }
+                .task(id: viewModel.selectedAnswer) {
+                    guard viewModel.selectedAnswer != nil else { return }
+                    // Let the feedback and fixed Next control finish changing
+                    // the viewport before scrolling. A new answer cancels this.
+                    do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.84)) {
+                        scrollProxy.scrollTo("answer-feedback-scroll-target", anchor: .bottom)
                     }
                 }
             }
@@ -290,14 +290,19 @@ public struct LearningView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(evaluation.message)
                             .font(.system(.title3, design: .rounded, weight: .heavy))
+                            .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("answer-feedback")
 
                         if let hint = evaluation.hint {
                             Text(hint.message)
                                 .font(.system(.body, design: .rounded, weight: .medium))
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("answer-explanation")
                         } else if !evaluation.explanation.isEmpty {
                             Text(evaluation.explanation)
                                 .font(.system(.body, design: .rounded, weight: .medium))
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("answer-explanation")
                         }
                     }
                 }
@@ -322,17 +327,18 @@ public struct LearningView: View {
     @ViewBuilder
     private func voiceFallback(question: TimeQuestion, palette: HeroPalette) -> some View {
         if isVoiceAvailable, let onVoiceCoachRequested {
-            Button {
-                onVoiceCoachRequested(question)
-            } label: {
-                Label(
-                    LearningCopy.text(.listenToCoach, language: viewModel.language),
-                    systemImage: "waveform.circle.fill"
-                )
+            if isVoiceRequestEnabled {
+                Button {
+                    onVoiceCoachRequested(question)
+                } label: {
+                    Label(
+                        LearningCopy.text(.listenToCoach, language: viewModel.language),
+                        systemImage: "waveform.circle.fill"
+                    )
+                }
+                .buttonStyle(HeroButtonStyle(color: palette.primary, isProminent: true))
+                .accessibilityIdentifier("voice-coach-button")
             }
-            .buttonStyle(HeroButtonStyle(color: palette.primary, isProminent: true))
-            .disabled(!isVoiceRequestEnabled)
-            .accessibilityIdentifier("voice-coach-button")
         } else {
             HStack(alignment: .top, spacing: WatchLearnSpacing.small) {
                 Image(systemName: "hand.tap.fill")

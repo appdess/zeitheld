@@ -397,6 +397,7 @@ final class VoiceCoachCoordinator {
 
     #if DEBUG
     func showCoachSpeakingStatusForUITesting() {
+        isSessionActive = true
         phase = .coachSpeaking
         coachTranscript = "This deliberately long coach transcript must never be rendered in the compact status bar."
     }

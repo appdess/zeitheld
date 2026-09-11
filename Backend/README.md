@@ -13,6 +13,7 @@ into your own Google Cloud/Firebase project; the repository has no server key.
 | `IDENTITY_HASH_SECRET` | Secret Manager-injected random secret, at least 32 characters |
 | `PUBLIC_ACCESS_ENABLED` | Keep `false` until public child-service requirements are verified |
 | `UNLIMITED_EMAIL_SHA256` | Optional SHA-256 of one normalized, verified adult test email; omit for no exception |
+| `TRIAL_TESTER_EMAIL_SHA256` | Optional SHA-256 of one normalized, verified adult test email allowed into the private beta with the ordinary five-minute trial; omit that email from `UNLIMITED_EMAIL_SHA256` to test exhaustion |
 | `MAX_SESSION_SECONDS` | Default 600 seconds per session reservation |
 | `GLOBAL_DAILY_SECONDS` | Default 7200 reserved seconds per UTC day; conservative reservations are not refunded |
 

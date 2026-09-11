@@ -6,7 +6,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { CloudTasksClient } from '@google-cloud/tasks';
 import { OAuth2Client } from 'google-auth-library';
 import { closeLiveProvider } from './provider-close.js';
-import { AppError, identity, hash, TRIAL_SECONDS } from './policy.js';
+import { AppError, identity, hash, TRIAL_SECONDS, hostedAccessEnabled } from './policy.js';
 import { Ledger } from './ledger.js';
 import { sessionStart } from './session.js';
 import { generateHero, transcribeHero } from './heroes.js';
@@ -29,7 +29,7 @@ async function authenticate(req) {
   let token;
   try { token = await auth.verifyIdToken(header.slice(7), true); }
   catch { throw new AppError('sign_in_required', 401); }
-  return { ...identity(token, identitySecret, process.env.UNLIMITED_EMAIL_SHA256), authTime: token.auth_time };
+  return { ...identity(token, identitySecret, process.env.UNLIMITED_EMAIL_SHA256, process.env.TRIAL_TESTER_EMAIL_SHA256), authTime: token.auth_time };
 }
 function json(res, status, value) {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -40,7 +40,7 @@ async function body(req, maximumBytes = 64000) {
   for await (const chunk of req) { bytes += chunk.length; if (bytes > maximumBytes) throw new AppError('request_too_large', 413); chunks.push(chunk); }
   try { return JSON.parse(Buffer.concat(chunks)); } catch { throw new AppError('invalid_request'); }
 }
-function enabled(who) { return Boolean(apiKey) && (who.unlimited || process.env.PUBLIC_ACCESS_ENABLED === 'true'); }
+function enabled(who) { return hostedAccessEnabled(who, { apiKeyConfigured: Boolean(apiKey), publicAccess: process.env.PUBLIC_ACCESS_ENABLED === 'true' }); }
 async function createSession(who, input) {
   if (!enabled(who) || !serviceURL) throw new AppError('service_unavailable', 503);
   if (!['de', 'en'].includes(input.language) || typeof input.sdp !== 'string' || !input.sdp.startsWith('v=0') || input.sdp.length > 50000) throw new AppError('invalid_offer');

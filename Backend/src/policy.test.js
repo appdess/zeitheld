@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { identity, hash, remainingTrialSeconds, reserveTrial, settleTrial } from './policy.js';
+import { identity, hash, remainingTrialSeconds, reserveTrial, settleTrial, hostedAccessEnabled } from './policy.js';
 
 test('trial is tied to verified Apple identity, not Firebase UID or claimed email', () => {
   const auth = {uid:'first', email:'Tester@Example.com', email_verified:true,
@@ -42,4 +42,26 @@ test('unlimited bypasses trial balance while preserving a session deadline', () 
   assert.equal(reserved.usedSeconds, 600);
   assert.equal(reserved.active.reservedSeconds, 600);
   assert.equal(settleTrial(reserved, 'one', 59).usedSeconds, 600);
+});
+
+test('a verified private tester receives the ordinary trial without public or unlimited access', () => {
+  const auth = { uid: 'tester', email: 'Tester@Example.com', email_verified: true,
+    firebase: { sign_in_provider: 'apple.com', identities: { 'apple.com': ['stable-apple-id'] } } };
+  const who = identity(auth, 'secret', undefined, hash('tester@example.com'));
+  const config = { apiKeyConfigured: true, publicAccess: false };
+  assert.equal(who.unlimited, false);
+  assert.equal(who.trialTester, true);
+  assert.equal(hostedAccessEnabled(who, config), true);
+  assert.equal(hostedAccessEnabled(who, { ...config, apiKeyConfigured: false }), false);
+  const reserved = reserveTrial(null, { now: 0, sessionID: 'trial', unlimited: who.unlimited });
+  assert.equal(reserved.active.reservedSeconds, 300);
+  const spent = settleTrial(reserved, 'trial', 300);
+  assert.throws(() => reserveTrial(spent, { now: 301000, sessionID: 'again', unlimited: who.unlimited }), /trial_exhausted/);
+  for (const changed of [{ email_verified: false }, { email: 'someone-else@example.com' }, { email: undefined }]) {
+    const other = identity({ ...auth, ...changed }, 'secret', undefined, hash('tester@example.com'));
+    assert.equal(other.trialTester, false);
+    assert.equal(hostedAccessEnabled(other, config), false);
+  }
+  assert.equal(hostedAccessEnabled({ unlimited: 'true', trialTester: 'true' }, config), false);
+  assert.equal(hostedAccessEnabled({ unlimited: false, trialTester: false }, { ...config, publicAccess: true }), true);
 });

@@ -6,15 +6,21 @@ export class AppError extends Error {
 export const hash = value => createHash('sha256').update(value).digest('hex');
 export const TRIAL_SECONDS = 5 * 60;
 export const remainingTrialSeconds = account => Math.max(0, TRIAL_SECONDS - (account?.usedSeconds ?? 0));
-export function identity(auth, secret, unlimitedEmailHash) {
+export function identity(auth, secret, unlimitedEmailHash, trialTesterEmailHash) {
   const apple = auth.firebase?.identities?.['apple.com']?.[0];
   if (!apple || auth.firebase?.sign_in_provider !== 'apple.com') throw new AppError('apple_sign_in_required', 403);
+  const verifiedEmailHash = auth.email_verified === true && typeof auth.email === 'string'
+    ? hash(auth.email.trim().toLowerCase()) : null;
   return {
     uid: auth.uid,
     ledgerID: createHmac('sha256', secret).update(`apple:${apple}`).digest('hex'),
-    unlimited: auth.email_verified === true && typeof auth.email === 'string'
-      && hash(auth.email.trim().toLowerCase()) === unlimitedEmailHash,
+    unlimited: verifiedEmailHash !== null && verifiedEmailHash === unlimitedEmailHash,
+    trialTester: verifiedEmailHash !== null && verifiedEmailHash === trialTesterEmailHash,
   };
+}
+
+export function hostedAccessEnabled(who, { apiKeyConfigured, publicAccess }) {
+  return Boolean(apiKeyConfigured) && (who.unlimited === true || who.trialTester === true || publicAccess === true);
 }
 
 export function reserveTrial(account, { now, sessionID, unlimited, maxSeconds = 600 }) {

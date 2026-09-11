@@ -6,6 +6,35 @@ final class WatchLearnUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    /// Paid device regression using the actual signed-in account and button.
+    /// No fixture arguments: preserve the parent's existing consent and settings.
+    func testSignedInLiveVoiceButtonStartsAndStops() throws {
+        guard ProcessInfo.processInfo.environment["WATCHLEARN_RUN_SIGNED_IN_VOICE_UI"] == "1" else {
+            throw XCTSkip("Explicitly enable the paid signed-in Live voice UI test.")
+        }
+        let app = XCUIApplication()
+        app.launch()
+        let start = app.buttons["voice-coach-button"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        XCTAssertTrue(start.isEnabled)
+        print("NATIVE_VOICE_UI tapping_start")
+        start.tap()
+        let listening = app.staticTexts.matching(NSPredicate(
+            format: "label == %@ OR label == %@",
+            "Du bist dran – ich höre zu", "Your turn — I’m listening"
+        )).firstMatch
+        XCTAssertTrue(listening.waitForExistence(timeout: 20), "Voice must leave Connecting and activate native audio")
+        print("NATIVE_VOICE_UI listening")
+        let stop = app.buttons["voice-stop-button"]
+        XCTAssertTrue(stop.isHittable)
+        stop.tap()
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        let stopped = NSPredicate { _, _ in start.isEnabled && !stop.exists }
+        expectation(for: stopped, evaluatedWith: nil)
+        waitForExpectations(timeout: 35)
+        print("NATIVE_VOICE_UI stopped start_button_available")
+    }
+
     func testPrivacyReviewReturnsToSettingsWithoutAccepting() throws {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--english"]
@@ -255,7 +284,15 @@ final class WatchLearnUITests: XCTestCase {
         app.launchArguments = ["--ui-testing", "--english"]
         app.launch()
         app.buttons["parent-settings-button"].tap()
-        XCTAssertFalse(app.buttons["parent-apple-sign-in"].exists)
+        let signIn = app.buttons["parent-apple-sign-in"]
+        XCTAssertTrue(signIn.waitForExistence(timeout: 3))
+        signIn.tap()
+        XCTAssertTrue(app.navigationBars["Privacy & choices"].waitForExistence(timeout: 3))
+        let confirm = app.buttons["agreement-confirm"]
+        scrollTo(confirm, in: app)
+        XCTAssertFalse(confirm.isEnabled, "Opening sign-in must not accept any choices")
+        app.buttons["agreement-back"].tap()
+        XCTAssertTrue(app.buttons["parent-apple-sign-in"].waitForExistence(timeout: 3))
         acceptFixtureAgreement(app, voice: false)
         app.buttons["settings-done-button"].tap()
         app.buttons["parent-settings-button"].tap()
@@ -279,7 +316,7 @@ final class WatchLearnUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["withdrawal-status"].waitForExistence(timeout: 3))
         app.buttons["settings-done-button"].tap()
         app.buttons["parent-settings-button"].tap()
-        XCTAssertFalse(app.buttons["parent-apple-sign-in"].exists)
+        XCTAssertTrue(app.buttons["parent-apple-sign-in"].exists)
         scrollTo(app.descendants(matching: .any)["voice-online-toggle"].firstMatch, in: app)
         XCTAssertEqual(app.descendants(matching: .any)["voice-online-toggle"].firstMatch.value as? String, "Off")
         scrollTo(app.descendants(matching: .any)["hero-online-toggle"].firstMatch, in: app)
@@ -529,5 +566,33 @@ final class WatchLearnUITests: XCTestCase {
             72,
             "the compact voice status must remain a single visual line"
         )
+    }
+
+    func testNextQuestionStaysVisibleAboveVoiceControlsInGermanAndEnglish() throws {
+        for language in ["de", "en"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-testing", "--ui-testing-voice-status",
+                "-AppleLanguages", "(\(language))", "-parent.language", language,
+                "-parent.follows-device-language", "NO"]
+            if language == "en" { app.launchArguments.append("--english") }
+            app.launch()
+            let correct = app.buttons["answer-choice-4-0"]
+            XCTAssertTrue(correct.waitForExistence(timeout: 5))
+            correct.tap()
+            let next = app.buttons["next-question-button"]
+            let status = app.descendants(matching: .any)["voice-coach-status-bar"]
+            XCTAssertTrue(next.waitForExistence(timeout: 5))
+            XCTAssertTrue(next.isHittable, "Next must be visible without scrolling")
+            XCTAssertLessThanOrEqual(next.frame.maxY, status.frame.minY + 1)
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "visible-next-\(language)"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            next.tap()
+            XCTAssertFalse(next.exists)
+            XCTAssertFalse(app.staticTexts["answer-feedback"].exists)
+            XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "answer-choice-")).firstMatch.isEnabled)
+            app.terminate()
+        }
     }
 }

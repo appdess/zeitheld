@@ -221,6 +221,7 @@ enum RealtimeServiceEvent: Equatable, Sendable {
     case spokenCorrectAnswerFeedbackFinished(responseID: String, questionID: Int?)
     case clockAnswerReported(ClockAnswerReport, ClockAnswerToolResult)
     case liveClockAnswerReported(ClockAnswerReport, ClockAnswerToolResult, questionID: Int)
+    case liveAdvanceRequested(questionID: Int)
     case serverError(RealtimeAPIError)
 }
 

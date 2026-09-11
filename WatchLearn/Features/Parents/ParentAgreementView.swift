@@ -8,9 +8,11 @@ struct ParentAgreementView: View {
     @State private var saving = false
     @State private var errorMessage: String?
     @State private var completionMessage: String?
+    private let onConfirmed: (() -> Void)?
 
-    init(preferences: ParentPreferences) {
+    init(preferences: ParentPreferences, onConfirmed: (() -> Void)? = nil) {
         self.preferences = preferences
+        self.onConfirmed = onConfirmed
         // First consent is always opt-in. Existing choices are shown for editing.
         _document = State(initialValue: preferences.agreementAcceptance?.document
             ?? ParentAgreement(locale: preferences.language.rawValue))
@@ -99,6 +101,7 @@ struct ParentAgreementView: View {
             } else {
                 preferences.recordAgreement(document)
             }
+            onConfirmed?()
             dismiss()
         } catch {
             errorMessage = copy("Nicht bestätigt: Die Auswahl konnte nicht auf dem Server gespeichert werden. Online-Funktionen bleiben auf diesem Gerät aus. Bitte erneut versuchen.", "Not confirmed: your choices could not be saved on the server. Online features remain off on this device. Please try again.")

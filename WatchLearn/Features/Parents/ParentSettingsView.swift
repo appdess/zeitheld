@@ -1,11 +1,13 @@
 import SwiftUI
 import Security
+import AuthenticationServices
 
 struct ParentSettingsView: View {
     @Bindable var preferences: ParentPreferences
     let generatedHeroImageStore: GeneratedHeroImageStore
     var learningViewModel: LearningViewModel? = nil
     let onDone: () -> Void
+    @Environment(\.authorizationController) private var authorizationController
 
     @State private var showingResetJourney = false
     @State private var apiKeyDraft = ""
@@ -17,9 +19,10 @@ struct ParentSettingsView: View {
     @State private var activeSheet: ParentSheet?
     @State private var withdrawingAgreement = false
     @State private var withdrawalMessage: String?
+    @State private var signInAfterAgreement = false
 
     private enum ParentSheet: String, Identifiable {
-        case agreement, accountDeletion
+        case agreement, signInAgreement, accountDeletion
         var id: String { rawValue }
     }
 
@@ -41,6 +44,7 @@ struct ParentSettingsView: View {
                     }
                 }
                 ParentAccountSection(preferences: preferences,
+                    onSignIn: beginSignIn,
                     onReviewAgreement: { activeSheet = .agreement },
                     onDeleteAccount: { activeSheet = .accountDeletion })
                 onlineAccessSection
@@ -275,11 +279,42 @@ struct ParentSettingsView: View {
             }
         }
         // Keep presentation ownership outside Form's lazily recycled sections.
-        .sheet(item: $activeSheet) { sheet in
+        .sheet(item: $activeSheet, onDismiss: {
+            guard signInAfterAgreement else { return }
+            signInAfterAgreement = false
+            Task { await signInWithApple() }
+        }) { sheet in
             switch sheet {
             case .agreement: ParentAgreementView(preferences: preferences)
+            case .signInAgreement:
+                ParentAgreementView(preferences: preferences, onConfirmed: { signInAfterAgreement = true })
             case .accountDeletion: ParentAccountDeletionView(preferences: preferences)
             }
+        }
+    }
+
+    private func beginSignIn() {
+        preferences.selectCloudVoiceMode(.managedAccount)
+        if preferences.hasCurrentAgreement {
+            Task { await signInWithApple() }
+        } else {
+            activeSheet = .signInAgreement
+        }
+    }
+
+    private func signInWithApple() async {
+        let account = ParentAccount.shared
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        guard account.prepare(request, agreement: preferences.agreementAcceptance?.document) else { return }
+        do {
+            let result = try await authorizationController.performRequest(request)
+            guard case let .appleID(credential) = result else { throw ManagedAccountError.invalidSignIn }
+            await account.completeApple(.success(credential))
+        } catch {
+            await account.completeApple(.failure(error))
+        }
+        if account.signedIn, let document = preferences.agreementAcceptance?.document {
+            preferences.recordAgreement(document, accountID: account.accountID, receipt: account.allowance?.consent)
         }
     }
 

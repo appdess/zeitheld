@@ -9,6 +9,7 @@ public struct LearningView: View {
 
     private let isVoiceAvailable: Bool
     private let isVoiceRequestEnabled: Bool
+    private let showsNextQuestionControl: Bool
     private let customHeroBackgroundData: Data?
     private let onVoiceCoachRequested: (@MainActor (TimeQuestion) -> Void)?
 
@@ -17,6 +18,7 @@ public struct LearningView: View {
         startingLevel: TimeLearningLevel = .fullHour,
         isVoiceAvailable: Bool = false,
         isVoiceRequestEnabled: Bool = true,
+        showsNextQuestionControl: Bool = true,
         customHeroBackgroundData: Data? = nil,
         onVoiceCoachRequested: (@MainActor (TimeQuestion) -> Void)? = nil
     ) {
@@ -28,6 +30,7 @@ public struct LearningView: View {
         )
         self.isVoiceAvailable = isVoiceAvailable
         self.isVoiceRequestEnabled = isVoiceRequestEnabled
+        self.showsNextQuestionControl = showsNextQuestionControl
         self.customHeroBackgroundData = customHeroBackgroundData
         self.onVoiceCoachRequested = onVoiceCoachRequested
     }
@@ -36,12 +39,14 @@ public struct LearningView: View {
         viewModel: LearningViewModel,
         isVoiceAvailable: Bool = false,
         isVoiceRequestEnabled: Bool = true,
+        showsNextQuestionControl: Bool = true,
         customHeroBackgroundData: Data? = nil,
         onVoiceCoachRequested: (@MainActor (TimeQuestion) -> Void)? = nil
     ) {
         _viewModel = State(initialValue: viewModel)
         self.isVoiceAvailable = isVoiceAvailable
         self.isVoiceRequestEnabled = isVoiceRequestEnabled
+        self.showsNextQuestionControl = showsNextQuestionControl
         self.customHeroBackgroundData = customHeroBackgroundData
         self.onVoiceCoachRequested = onVoiceCoachRequested
     }
@@ -76,6 +81,7 @@ public struct LearningView: View {
                         header(theme: question.heroTheme)
                         progressCard(palette: palette)
                         questionCard(question: question, palette: palette)
+                            .id("current-clock-scroll-target")
                         answerGrid(question: question, palette: palette)
                         voiceFallback(question: question, palette: palette)
 
@@ -93,6 +99,11 @@ public struct LearningView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .scrollBounceBehavior(.basedOnSize)
+                .onChange(of: viewModel.question.id) { _, _ in
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        scrollProxy.scrollTo("current-clock-scroll-target", anchor: .top)
+                    }
+                }
                 .onChange(of: viewModel.selectedAnswer) { _, answer in
                     guard answer != nil else { return }
                     Task { @MainActor in
@@ -112,6 +123,11 @@ public struct LearningView: View {
             }
         }
         .foregroundStyle(palette.ink)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if showsNextQuestionControl, viewModel.canContinue {
+                LearningNextQuestionControl(viewModel: viewModel)
+            }
+        }
         .animation(.spring(response: 0.4, dampingFraction: 0.82), value: viewModel.evaluation)
         .sensoryFeedback(.success, trigger: viewModel.evaluation?.isCorrect == true)
     }
@@ -299,18 +315,6 @@ public struct LearningView: View {
                     .accessibilityHidden(true)
                 }
 
-                if evaluation.isCorrect {
-                    Button {
-                        viewModel.continueLesson()
-                    } label: {
-                        Label(
-                            LearningCopy.text(.nextQuestion, language: viewModel.language),
-                            systemImage: "arrow.right.circle.fill"
-                        )
-                    }
-                    .accessibilityIdentifier("next-question-button")
-                    .buttonStyle(HeroButtonStyle(color: palette.primary))
-                }
             }
         }
     }
@@ -375,6 +379,28 @@ public struct LearningView: View {
             return "arrow.counterclockwise.circle.fill"
         }
         return "clock"
+    }
+}
+
+/// Kept in RootView's shared bottom inset so TabView cannot cover it with
+/// the persistent microphone controls or navigation bar.
+struct LearningNextQuestionControl: View {
+    let viewModel: LearningViewModel
+
+    var body: some View {
+        Button {
+            viewModel.continueLesson()
+        } label: {
+            Label(LearningCopy.text(.nextQuestion, language: viewModel.language),
+                  systemImage: "arrow.right.circle.fill")
+        }
+        .accessibilityIdentifier("next-question-button")
+        .buttonStyle(HeroButtonStyle(color: viewModel.question.heroTheme.palette.primary))
+        .frame(maxWidth: 688)
+        .padding(.horizontal, WatchLearnSpacing.medium)
+        .padding(.vertical, WatchLearnSpacing.small)
+        .frame(maxWidth: .infinity)
+        .background(.regularMaterial)
     }
 }
 

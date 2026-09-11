@@ -5,7 +5,9 @@ export class AppError extends Error {
 }
 export const hash = value => createHash('sha256').update(value).digest('hex');
 export const TRIAL_SECONDS = 5 * 60;
-export const remainingTrialSeconds = account => Math.max(0, TRIAL_SECONDS - (account?.usedSeconds ?? 0));
+// Support grants are server-only ledger fields; client Firestore writes are denied.
+const grantedSeconds = account => Number.isSafeInteger(account?.grantedSeconds) && account.grantedSeconds > 0 ? account.grantedSeconds : 0;
+export const remainingTrialSeconds = account => Math.max(0, TRIAL_SECONDS + grantedSeconds(account) - (account?.usedSeconds ?? 0));
 export function identity(auth, secret, unlimitedEmailHash, trialTesterEmailHash) {
   const apple = auth.firebase?.identities?.['apple.com']?.[0];
   if (!apple || auth.firebase?.sign_in_provider !== 'apple.com') throw new AppError('apple_sign_in_required', 403);
@@ -29,6 +31,7 @@ export function reserveTrial(account, { now, sessionID, unlimited, maxSeconds = 
   const seconds = unlimited ? maxSeconds : Math.min(maxSeconds, remainingTrialSeconds(account));
   if (seconds < 15) throw new AppError('trial_exhausted', 402);
   return {
+    grantedSeconds: grantedSeconds(account),
     usedSeconds: usedSeconds + (unlimited ? 0 : seconds),
     active: { sessionID, reservedSeconds: seconds, unlimited, expiresAt: now + (seconds + 30) * 1000 },
   };
@@ -40,5 +43,5 @@ export function settleTrial(account, sessionID, seconds) {
   const billed = Number.isFinite(seconds) && seconds >= 0 ? Math.ceil(seconds) : active.reservedSeconds;
   const usedSeconds = active.unlimited ? account.usedSeconds
     : Math.max(0, account.usedSeconds - active.reservedSeconds + billed);
-  return { usedSeconds, active: null };
+  return { usedSeconds, grantedSeconds: grantedSeconds(account), active: null };
 }

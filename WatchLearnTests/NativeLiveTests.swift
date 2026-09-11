@@ -5,6 +5,21 @@ import XCTest
 
 @MainActor
 final class NativeLiveTests: XCTestCase {
+    func testGreetingIsLocalizedAndFirstClockWithoutHistoryStillWaitsForAudio() throws {
+        for language in [RealtimeCoachLanguage.german, .english] {
+            let context = ClockChallengeContext(questionID: 1, hour: 3, minute: 0, difficulty: "fullHour", language: language)
+            let first = LiveClockCoachPrompt.challengeInstructions(context, firstInSession: true)
+            XCTAssertTrue(first.contains("VOICE_READY"))
+            XCTAssertFalse(first.contains("previous exercise is over"))
+            let next = LiveClockCoachPrompt.challengeInstructions(context, firstInSession: false)
+            XCTAssertFalse(next.contains("VOICE_READY"))
+            let opening = LiveClockCoachPrompt.voiceReady(language: language)
+            XCTAssertTrue(opening.contains(language == .german ? "ich bin dein Zeitheld" : "I'm your Time Hero"))
+            XCTAssertTrue(opening.contains("Speak first now"))
+            XCTAssertFalse(opening.contains("3:00"))
+        }
+    }
+
     func testUnownedWebRTCCallbacksCannotConnectOrDisconnectTheService() async throws {
         let factory = RTCPeerConnectionFactory()
         let service = ManagedLiveSession(baseURL: URL(string: "https://service.invalid")!, token: "fixture", factory: factory)
@@ -151,6 +166,8 @@ final class NativeLiveTests: XCTestCase {
         defer { observer.cancel() }
         try await service.open(language: .german, safetyIdentifier: .init(stableID: "duplex"))
         try await service.setChallenge(challenge(1, hour: 3))
+        let beforeCapture = try await transport.sent.map { try object($0) }
+        XCTAssertFalse(beforeCapture.contains { ($0["content"] as? String)?.hasPrefix("VOICE_READY:") == true })
         try await service.startVoice(authorizedBy: audio.authorizeCaptureStart())
         try await enqueueAnswer(transport, id: "d1", questionID: 1)
 
@@ -162,6 +179,9 @@ final class NativeLiveTests: XCTestCase {
         XCTAssertEqual(audio.starts, 1)
         XCTAssertEqual(audio.stops, 0)
         try await service.setChallenge(challenge(2, hour: 4))
+        let afterNewClock = try await transport.sent.map { try object($0) }
+        XCTAssertEqual(afterNewClock.filter { ($0["content"] as? String)?.hasPrefix("VOICE_READY:") == true }.count, 1,
+                       "Audio-ready greeting is sent once, after capture starts, not for every clock.")
         await grader.finish()
         try await eventually { try await self.sentTypes(transport).contains("response.item.create") }
         XCTAssertTrue(reports.isEmpty, "A grade for the old question must not reach the current clock")
@@ -177,7 +197,7 @@ final class NativeLiveTests: XCTestCase {
         XCTAssertEqual(audio.playbackStops, 1)
     }
 
-    func testValidDelegationGradesOnceAndNeverInventsAutoAdvanceCorrelation() async throws {
+    func testValidDelegationGradesOnceAndNeverTreatsTranscriptAsAudioCompletion() async throws {
         let transport = NativeFixtureTransport([#"{"type":"session.started"}"#])
         let service = OpenAILiveService(apiKey: fixtureKey, transport: transport)
         var grades: [ClockAnswerToolResult] = []
@@ -187,6 +207,7 @@ final class NativeLiveTests: XCTestCase {
             for await event in service.events {
                 if case .liveClockAnswerReported(_, let result, _) = event { grades.append(result) }
                 if case .spokenCorrectAnswerFeedbackFinished = event { advances += 1 }
+                if case .liveAdvanceRequested = event { advances += 1 }
                 if case .serverError = event { failures += 1 }
             }
         }
@@ -203,6 +224,59 @@ final class NativeLiveTests: XCTestCase {
         XCTAssertEqual(failures, 0)
         let count = try await sentTypes(transport).filter { $0 == "response.item.create" }.count
         XCTAssertEqual(count, 1)
+    }
+
+    func testLiveAdvanceWaitsForAudibleFeedbackAndQuietThenFiresOnlyOnce() {
+        var gate = LiveExerciseAdvanceGate()
+        XCTAssertNil(gate.takeReadyQuestion(at: 100))
+        gate.arm(questionID: 7, at: 100)
+        XCTAssertNil(gate.takeReadyQuestion(at: 120), "No audio means manual Next remains available")
+        gate.observeAudibleOutput(at: 121)
+        XCTAssertNil(gate.takeReadyQuestion(at: 122))
+        gate.observeAudibleOutput(at: 122)
+        XCTAssertNil(gate.takeReadyQuestion(at: 123))
+        XCTAssertEqual(gate.takeReadyQuestion(at: 123.6), 7)
+        XCTAssertNil(gate.takeReadyQuestion(at: 130))
+        gate.arm(questionID: 8, at: 140)
+        gate.observeAudibleOutput(at: 140.1)
+        XCTAssertNil(gate.takeReadyQuestion(at: 142), "Keep feedback on screen at least three seconds")
+        gate.cancel()
+        XCTAssertNil(gate.takeReadyQuestion(at: 145), "Stop/new clock cancels pending progress")
+    }
+
+    func testWebRTCAudioActivityRejectsMissingProgressAndCounterResets() {
+        var activity = LiveInboundAudioActivity()
+        XCTAssertNil(activity.observe(energy: 0, duration: 0))
+        XCTAssertEqual(activity.observe(energy: 0.001, duration: 1), true)
+        XCTAssertNil(activity.observe(energy: 0.001, duration: 1))
+        XCTAssertEqual(activity.observe(energy: 0.001, duration: 2), false)
+        XCTAssertNil(activity.observe(energy: 0, duration: 0))
+        XCTAssertNil(activity.observe(energy: .nan, duration: 1))
+    }
+
+    func testLiveAudibleFeedbackAdvancesTheGradedClockWithoutAnotherTap() async throws {
+        let transport = NativeFixtureTransport([#"{"type":"session.started"}"#])
+        let audio = NativeFixtureAudio()
+        let service = OpenAILiveService(apiKey: fixtureKey, transport: transport, audioPlayback: audio)
+        var graded = false
+        var advances: [Int] = []
+        let observer = Task {
+            for await event in service.events {
+                if case .liveClockAnswerReported(_, let result, _) = event { graded = result.correct == true }
+                if case .liveAdvanceRequested(let id) = event { advances.append(id) }
+            }
+        }
+        defer { observer.cancel() }
+        try await service.open(language: .english, safetyIdentifier: .init(stableID: "auto-next-test"))
+        try await service.setChallenge(challenge(7, hour: 3))
+        try await enqueueAnswer(transport, id: "correct", questionID: 7)
+        try await eventually { graded }
+        let audible = Data([0xff, 0x3f, 0xff, 0x3f]).base64EncodedString()
+        await transport.enqueue("{\"type\":\"session.output_audio.delta\",\"delta\":\"\(audible)\"}")
+        try await eventually { audio.played.count == 1 }
+        try await Task.sleep(for: .seconds(3.5))
+        XCTAssertEqual(advances, [7])
+        await service.disconnect()
     }
 
     func testNativeDenialReachesCoordinatorAsLiveErrorWithoutCapture() async throws {

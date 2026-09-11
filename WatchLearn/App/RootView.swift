@@ -43,7 +43,14 @@ struct RootView: View {
                 learningViewModel.chooseSpoken(ClockTime(hour: hour, minute: minute))
             }
             voiceCoach.onSpokenCorrectAnswerFeedbackFinished = { questionID, _ in
-                guard learningViewModel.question.id == questionID else { return }
+                guard voiceChildID == learningViewModel.journeys?.selectedID,
+                      learningViewModel.question.id == questionID else { return }
+                learningViewModel.continueAfterSpokenFeedback(questionID: questionID)
+            }
+            voiceCoach.onLiveAdvanceRequested = { questionID in
+                guard selectedTab == 0, !showingParentSettings,
+                      voiceChildID == learningViewModel.journeys?.selectedID,
+                      learningViewModel.question.id == questionID else { return }
                 learningViewModel.continueAfterSpokenFeedback(questionID: questionID)
             }
             voiceCoach.onSpokenAutoAdvanceCancelled = {
@@ -116,6 +123,9 @@ struct RootView: View {
         .toolbar(.hidden, for: .tabBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
+                if selectedTab == 0, learningViewModel.canContinue {
+                    LearningNextQuestionControl(viewModel: learningViewModel)
+                }
                 #if DEBUG
                 if usesHeroGenerationUITestFixture {
                     HeroUITestCompletionControls()
@@ -158,6 +168,7 @@ struct RootView: View {
                     isVoiceRequestEnabled: !voiceCoach.isStarting
                         && !voiceCoach.isStopping
                         && !voiceCoach.isSessionActive,
+                    showsNextQuestionControl: false,
                     customHeroBackgroundData: selectedHeroBackgroundData,
                     onVoiceCoachRequested: requestVoiceCoach
                 )

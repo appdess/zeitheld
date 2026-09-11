@@ -44,6 +44,23 @@ test('unlimited bypasses trial balance while preserving a session deadline', () 
   assert.equal(settleTrial(reserved, 'one', 59).usedSeconds, 600);
 });
 
+test('support credit adds time without erasing usage or weakening reservation and cutoff', () => {
+  const account = {usedSeconds: 120, grantedSeconds: 300};
+  assert.equal(remainingTrialSeconds(account), 480);
+  const reserved = reserveTrial(account, {now: 0, sessionID: 'credited', unlimited: false});
+  assert.equal(reserved.active.reservedSeconds, 480);
+  assert.equal(remainingTrialSeconds(reserved), 0);
+  assert.throws(() => reserveTrial(reserved, {now: 1, sessionID: 'parallel', unlimited: false}), /session_already_active/);
+  const settled = settleTrial(reserved, 'credited', 30);
+  assert.equal(settled.usedSeconds, 150);
+  assert.equal(remainingTrialSeconds(settled), 450);
+  const last = reserveTrial(settled, {now: 2, sessionID: 'last', unlimited: false});
+  const exhausted = settleTrial(last, 'last', undefined);
+  assert.equal(remainingTrialSeconds(exhausted), 0);
+  assert.throws(() => reserveTrial(exhausted, {now: 3, sessionID: 'again', unlimited: false}), /trial_exhausted/);
+  for (const invalid of [-300, '300', Infinity, 0.5]) assert.equal(remainingTrialSeconds({grantedSeconds: invalid}), 300);
+});
+
 test('a verified private tester receives the ordinary trial without public or unlimited access', () => {
   const auth = { uid: 'tester', email: 'Tester@Example.com', email_verified: true,
     firebase: { sign_in_provider: 'apple.com', identities: { 'apple.com': ['stable-apple-id'] } } };

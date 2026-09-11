@@ -41,6 +41,10 @@ actor OpenAILiveService: VoiceCoachingService {
     private var challenge: ClockChallengeContext?
     private var challengeRevision: UInt64 = 0
     private var outputSequence: UInt64 = 0
+    private var advanceGate = LiveExerciseAdvanceGate()
+    private var advanceTask: Task<Void, Never>?
+    private var audibleBuffers: Set<String> = []
+    private var solvedQuestionID: Int?
     private struct BackendWork {
         let challenge: ClockChallengeContext?
         let revision: UInt64
@@ -67,6 +71,7 @@ actor OpenAILiveService: VoiceCoachingService {
     }
 
     deinit {
+        advanceTask?.cancel()
         timeoutTask?.cancel(); receiveTask?.cancel(); sendTask?.cancel()
         for task in delegations.values { task.cancel() }
         input?.finish(); continuation.finish()
@@ -127,6 +132,7 @@ actor OpenAILiveService: VoiceCoachingService {
         let current = generation
         let firstInSession = challenge == nil
         challengeRevision &+= 1
+        advanceTask?.cancel(); advanceTask = nil; advanceGate.cancel(); solvedQuestionID = nil
         challenge = nil
         let revision = challengeRevision
         // Clock data is trusted app context. Images and Realtime conversation
@@ -168,6 +174,10 @@ actor OpenAILiveService: VoiceCoachingService {
             })
             try ensureCurrent(current)
             try Task.checkCancellation()
+            for event in try LiveEventCodec.context(LiveClockCoachPrompt.voiceReady(language: challenge?.language ?? .german), instructions: true) {
+                try await transport.send(text: event)
+                try ensureCurrent(current)
+            }
         } catch {
             await fail(error, generation: current)
             throw error
@@ -178,6 +188,7 @@ actor OpenAILiveService: VoiceCoachingService {
         guard !closing, connecting || connected else { return }
         let wasConnected = connected
         closing = true; connecting = false; connected = false
+        advanceTask?.cancel(); advanceTask = nil; advanceGate.cancel(); audibleBuffers.removeAll()
         timeoutTask?.cancel(); timeoutTask = nil
         input?.finish(); input = nil; sendTask?.cancel(); sendTask = nil
         for task in delegations.values { task.cancel() }
@@ -245,9 +256,11 @@ actor OpenAILiveService: VoiceCoachingService {
             // each after actual playback; Live has no audio-done event.
             outputSequence &+= 1
             let id = "live-buffer-\(current)-\(outputSequence)"
+            let audible = LiveAudioActivity.hasAudibleSamples(data)
+            if audible, playback != nil { audibleBuffers.insert(id) }
             try await playback?.enqueuePCM16(data, itemID: nil, responseID: id)
             try ensureCurrent(current)
-            if LiveAudioActivity.hasAudibleSamples(data) {
+            if audible {
                 continuation.yield(.assistantAudio(data: data, responseID: id))
             }
             if let playback {
@@ -291,6 +304,7 @@ actor OpenAILiveService: VoiceCoachingService {
                 if call.name == "report_clock_answer",
                    let parsed = try? JSONDecoder().decode(LiveClockAnswerDelegation.self, from: Data(call.arguments.utf8)),
                    let report = parsed.report, let challenge = work.challenge,
+                   solvedQuestionID != parsed.question_id,
                    parsed.question_id == challenge.questionID, work.revision == challengeRevision {
                     let result = await answerHandler.handle(report: report, challenge: challenge)
                     try Task.checkCancellation(); try ensureCurrent(current)
@@ -302,6 +316,10 @@ actor OpenAILiveService: VoiceCoachingService {
                 try await transport.send(text: LiveEventCodec.functionOutput(callID: call.callID, output: output))
                 try ensureCurrent(current)
                 if let (report, result, questionID) = accepted, work.revision == challengeRevision {
+                    if result.accepted, result.correct == true {
+                        solvedQuestionID = questionID
+                        armAdvance(questionID: questionID, generation: current)
+                    }
                     continuation.yield(.liveClockAnswerReported(report, result, questionID: questionID))
                 }
             }
@@ -313,7 +331,32 @@ actor OpenAILiveService: VoiceCoachingService {
 
     private func didDrain(_ id: String, generation current: UInt64) {
         guard generation == current, connected else { return }
+        if audibleBuffers.remove(id) != nil {
+            advanceGate.observeAudibleOutput(at: ProcessInfo.processInfo.systemUptime)
+        }
         continuation.yield(.assistantAudioFinished(responseID: id))
+    }
+
+    private func armAdvance(questionID: Int, generation current: UInt64) {
+        advanceTask?.cancel()
+        advanceGate.arm(questionID: questionID, at: ProcessInfo.processInfo.systemUptime)
+        advanceTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+                guard let self, await self.checkAdvance(generation: current) else { return }
+            }
+        }
+    }
+
+    private func checkAdvance(generation current: UInt64) -> Bool {
+        guard connected, generation == current, advanceGate.questionID != nil else { return false }
+        guard audibleBuffers.isEmpty else { return true }
+        if let questionID = advanceGate.takeReadyQuestion(at: ProcessInfo.processInfo.systemUptime),
+           challenge?.questionID == questionID {
+            continuation.yield(.liveAdvanceRequested(questionID: questionID))
+            return false
+        }
+        return true
     }
 
     private func fail(_ error: any Error, generation current: UInt64) async {

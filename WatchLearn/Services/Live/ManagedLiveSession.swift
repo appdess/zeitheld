@@ -18,6 +18,8 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
     private var remoteTracks: [RTCAudioTrack] = []
     private var localSessionID: String?
     private var ready = false
+    private var sentVoiceReady = false
+    private var ownsAudioActivation = false
     private var closing = false
     private var disconnectTask: Task<Void, Never>?
     private var challenge: ClockChallengeContext?
@@ -30,6 +32,12 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
     private var handledDelegations: Set<String> = []
     private var delegationTask: Task<Void, Never>?
     private var expiryTask: Task<Void, Never>?
+    private var audioActivityTask: Task<Void, Never>?
+    private var inboundActivity = LiveInboundAudioActivity()
+    private var advanceGate = LiveExerciseAdvanceGate()
+    private var solvedQuestionID: Int?
+    private var lastAudibleOutputAt: TimeInterval?
+    private var presentingSpeech = false
     private var interruptionHandler: (@Sendable (Bool) -> Void)?
     private var interruptionObserver: NSObjectProtocol?
 
@@ -47,6 +55,11 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
         let generation = connectionGeneration
         continuation.yield(.connectionStateChanged(.connecting))
         let audio = RTCAudioSession.sharedInstance()
+        // WebRTC reapplies this configuration when its audio unit starts.
+        // Setting AVAudioSession alone is overwritten with receiver routing.
+        let configuration = RTCAudioSessionConfiguration.webRTC()
+        configuration.categoryOptions.insert(.defaultToSpeaker)
+        RTCAudioSessionConfiguration.setWebRTC(configuration)
         audio.useManualAudio = true
         audio.isAudioEnabled = false
         let config = RTCConfiguration()
@@ -149,6 +162,7 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
         guard ready, let questionID = value.questionID else { throw RealtimeServiceError.notConnected }
         let firstInSession = challenge == nil
         revision &+= 1; challenge = value; transcript = ""; pendingDelegations.removeAll()
+        advanceGate.cancel(); solvedQuestionID = nil
         delegationTask?.cancel(); delegationTask = nil
         let text = LiveClockCoachPrompt.challengeInstructions(value, firstInSession: firstInSession)
         for event in try LiveEventCodec.context(text, instructions: true) { try send(event) }
@@ -158,15 +172,27 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
         try authorization.validate(value)
         guard ready else { throw RealtimeServiceError.notConnected }
         let audio = RTCAudioSession.sharedInstance()
-        audio.lockForConfiguration()
-        defer { audio.unlockForConfiguration() }
-        try audio.setCategory(AVAudioSession.Category.playAndRecord, with: [.defaultToSpeaker, .allowBluetooth])
-        try audio.setMode(AVAudioSession.Mode.voiceChat)
-        try audio.setActive(true)
+        do {
+            audio.lockForConfiguration()
+            defer { audio.unlockForConfiguration() }
+            try audio.setCategory(AVAudioSession.Category.playAndRecord, with: [.defaultToSpeaker, .allowBluetooth])
+            try audio.setMode(AVAudioSession.Mode.voiceChat)
+            try audio.setActive(true)
+            ownsAudioActivation = true
+        }
+        // Enabling tracks can synchronously wait for WebRTC's audio worker.
+        // That worker also takes the configuration lock; release it first.
         try authorization.validate(value)
         audio.isAudioEnabled = true
         microphone?.isEnabled = true
         remoteTracks.forEach { $0.isEnabled = true }
+        startObservingAudioActivity()
+        if !sentVoiceReady {
+            for event in try LiveEventCodec.context(LiveClockCoachPrompt.voiceReady(language: challenge?.language ?? .german), instructions: true) {
+                try send(event)
+            }
+            sentVoiceReady = true
+        }
     }
 
     func disconnect() async {
@@ -188,8 +214,15 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
         if let id = localSessionID { _ = try? await request("v1/sessions/\(id)/close", body: [:]) }
         channel?.close(); channel = nil
         peer?.close(); peer = nil
+        if ownsAudioActivation {
+            let audio = RTCAudioSession.sharedInstance()
+            audio.lockForConfiguration()
+            defer { audio.unlockForConfiguration() }
+            try? audio.setActive(false)
+            ownsAudioActivation = false
+        }
         localSessionID = nil; microphone = nil; remoteTracks.removeAll()
-        challenge = nil; transcript = ""; handledDelegations.removeAll()
+        challenge = nil; transcript = ""; handledDelegations.removeAll(); sentVoiceReady = false
         closing = false
         continuation.yield(.connectionStateChanged(.disconnected))
     }
@@ -198,7 +231,12 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
     func startCapture(authorizedBy value: RealtimeAudioCaptureAuthorization, onPCM16Chunk: @escaping @Sendable (Data) -> Void, onCaptureFailure: @escaping @Sendable (RealtimeAudioEngineError) -> Void) async throws { try await startVoice(authorizedBy: value) }
     func stopCapture() { authorization.revoke(); microphone?.isEnabled = false }
     func stopPlayback() { remoteTracks.forEach { $0.isEnabled = false }; RTCAudioSession.sharedInstance().isAudioEnabled = false }
-    func stopAll() { stopCapture(); stopPlayback() }
+    func stopAll() {
+        audioActivityTask?.cancel(); audioActivityTask = nil
+        advanceGate.cancel(); inboundActivity = LiveInboundAudioActivity()
+        lastAudibleOutputAt = nil; presentingSpeech = false
+        stopCapture(); stopPlayback()
+    }
     func enqueuePCM16(_ data: Data, itemID: String?, responseID: String) throws { /* WebRTC owns playback. */ }
     func notifyWhenPlaybackDrained(responseID: String, onDrained: @escaping @Sendable (String) -> Void) { }
     func setInterruptionHandler(_ handler: (@Sendable (Bool) -> Void)?) {
@@ -249,6 +287,10 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
     private func delegate(id: String, revision captured: UInt64) async {
         guard let sessionID = localSessionID, let challenge, let questionID = challenge.questionID else { return }
         do {
+            guard solvedQuestionID != questionID else {
+                for event in try LiveEventCodec.context("This clock is already solved. Pause for the next NEW_CLOCK_CHALLENGE; no further grade or tap is needed.", delegationID: id) { try send(event) }
+                return
+            }
             // Live delegates before its asynchronous transcript necessarily finishes.
             // Keep the duplex audio running while collecting a stable text snapshot
             // for grading; never commit, stop, or restart microphone audio here.
@@ -282,15 +324,63 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
             guard captured == revision, ready else { return }
             let output: String
             if result.correct == true {
-                output = "App grade for question \(questionID): correct. The child's spoken answer was correct. Give brief praise and invite them to tap Next. This grading task is complete. Every later answer is a new grading task."
+                output = "App grade for question \(questionID): correct. Give one short, warm sentence of praise, then pause. The app will show the next clock automatically after your feedback. Do not ask the child to tap Next. Wait for NEW_CLOCK_CHALLENGE before describing another clock. This grading task is complete."
             } else {
                 output = "App grade for question \(questionID): not correct yet. No star was awarded. Give one gentle hint about the hands and invite another attempt. This grading task is complete. Delegate the next attempted answer again."
             }
             for event in try LiveEventCodec.context(output, delegationID: id) { try send(event) }
+            if result.accepted, result.correct == true {
+                solvedQuestionID = questionID
+                advanceGate.arm(questionID: questionID, at: ProcessInfo.processInfo.systemUptime)
+            }
             continuation.yield(.liveClockAnswerReported(report, result, questionID: questionID))
         } catch {
             guard !Task.isCancelled, captured == revision, ready else { return }
             for event in (try? LiveEventCodec.context("The answer checker is unavailable. Do not grade. Invite the child to use the answer buttons.", delegationID: id)) ?? [] { try? send(event) }
+        }
+    }
+
+    private func startObservingAudioActivity() {
+        guard audioActivityTask == nil, let peer else { return }
+        let generation = connectionGeneration
+        audioActivityTask = Task { [weak self, weak peer] in
+            while !Task.isCancelled {
+                guard let peer else { return }
+                let sample: (Double, Double)? = await withCheckedContinuation { waiter in
+                    peer.statistics { report in
+                        let audio = report.statistics.values.first {
+                            $0.type == "inbound-rtp" && ($0.values["kind"] as? String == "audio"
+                                || $0.values["mediaType"] as? String == "audio")
+                        }
+                        guard let energy = audio?.values["totalAudioEnergy"] as? NSNumber,
+                              let duration = audio?.values["totalSamplesDuration"] as? NSNumber else {
+                            waiter.resume(returning: nil); return
+                        }
+                        waiter.resume(returning: (energy.doubleValue, duration.doubleValue))
+                    }
+                }
+                guard !Task.isCancelled, let self, self.connectionGeneration == generation,
+                      self.ready else { return }
+                if let sample, let audible = self.inboundActivity.observe(energy: sample.0, duration: sample.1) {
+                    let now = ProcessInfo.processInfo.systemUptime
+                    if audible {
+                        self.lastAudibleOutputAt = now
+                        self.advanceGate.observeAudibleOutput(at: now)
+                        if !self.presentingSpeech {
+                            self.presentingSpeech = true
+                            self.continuation.yield(.assistantAudio(data: Data(), responseID: "live-media"))
+                        }
+                    } else if let last = self.lastAudibleOutputAt, now - last >= 0.6, self.presentingSpeech {
+                        self.presentingSpeech = false
+                        self.continuation.yield(.assistantAudioFinished(responseID: "live-media"))
+                    }
+                    if let questionID = self.advanceGate.takeReadyQuestion(at: now),
+                       self.challenge?.questionID == questionID {
+                        self.continuation.yield(.liveAdvanceRequested(questionID: questionID))
+                    }
+                }
+                do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+            }
         }
     }
     private func send(_ text: String) throws {

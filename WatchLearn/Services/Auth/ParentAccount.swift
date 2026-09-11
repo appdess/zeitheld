@@ -5,6 +5,31 @@ import CryptoKit
 import Security
 import FirebaseCore
 import FirebaseAuth
+import OSLog
+
+enum ParentSignInStage: String {
+    case apple = "APPLE", firebase = "FIREBASE", consent = "CONSENT"
+}
+
+/// Retain only an allow-listed source and numeric code, never provider text,
+/// identity tokens or NSError.userInfo from an authentication failure.
+struct ParentSignInFailure {
+    let supportCode: String
+    init(error: Error, stage: ParentSignInStage) {
+        let error = error as NSError
+        let source: String
+        switch error.domain {
+        case ASAuthorizationError.errorDomain: source = "APPLE"
+        case AuthErrorDomain: source = "FIREBASE"
+        case NSURLErrorDomain: source = "NETWORK"
+        default: source = "APP"
+        }
+        supportCode = "AUTH-\(stage.rawValue)-\(source)-\(error.code)"
+    }
+    var message: String {
+        "Anmeldung fehlgeschlagen. Bitte erneut versuchen. / Sign-in failed. Please try again. [\(supportCode)]"
+    }
+}
 
 struct AccountAllowance: Decodable, Sendable {
     let unlimited: Bool
@@ -67,38 +92,55 @@ final class ParentAccount {
         signedIn = FirebaseApp.app() != nil && Auth.auth().currentUser != nil
     }
 
-    func prepare(_ request: ASAuthorizationAppleIDRequest, deleting: Bool = false, agreement: ParentAgreement? = nil) {
+    @discardableResult
+    func prepare(_ request: ASAuthorizationAppleIDRequest, deleting: Bool = false, agreement: ParentAgreement? = nil) -> Bool {
+        guard !busy else { return false }
         self.deleting = deleting
+        nonce = nil; pendingAgreement = nil; message = nil
         guard isConfigured else {
             nonce = nil; message = "Online-Zugang ist in dieser Installation nicht eingerichtet. / Online access is not configured in this build."
-            return
+            return false
         }
         guard deleting || agreement?.isValid == true else {
             nonce = nil; pendingAgreement = nil
             message = "Bitte zuerst Datenschutz und Berechtigungen prüfen. / Review privacy and permissions first."
-            return
+            return false
         }
         pendingAgreement = agreement
         var bytes = [UInt8](repeating: 0, count: 32)
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
-            nonce = nil; message = "Anmeldung nicht verfügbar / Sign-in unavailable"; return
+            nonce = nil; message = "Anmeldung nicht verfügbar / Sign-in unavailable"; return false
         }
         let raw = Data(bytes).base64EncodedString()
         nonce = raw
         request.requestedScopes = [.email]
         request.nonce = SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
+        busy = true
+        return true
     }
 
     func complete(_ result: Result<ASAuthorization, Error>) async {
+        await completeApple(result.flatMap { authorization in
+            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+                return .failure(ManagedAccountError.invalidSignIn)
+            }
+            return .success(credential)
+        })
+    }
+
+    func completeApple(_ result: Result<ASAuthorizationAppleIDCredential, Error>) async {
         busy = true; message = nil
+        var stage = ParentSignInStage.apple
         defer { busy = false; nonce = nil; deleting = false; pendingAgreement = nil }
         do {
+            // Preserve Apple's cancellation/failure even when preparation failed.
+            let apple = try result.get()
             guard let nonce,
-                  let apple = try result.get().credential as? ASAuthorizationAppleIDCredential,
                   let data = apple.identityToken, let token = String(data: data, encoding: .utf8) else {
                 throw ManagedAccountError.invalidSignIn
             }
             let credential = OAuthProvider.appleCredential(withIDToken: token, rawNonce: nonce, fullName: nil)
+            stage = .firebase
             if deleting {
                 guard let user = Auth.auth().currentUser,
                       let codeData = apple.authorizationCode,
@@ -112,12 +154,16 @@ final class ParentAccount {
                 guard let agreement = pendingAgreement, agreement.isValid else { throw ManagedAccountError.agreementRequired }
                 _ = try await Auth.auth().signIn(with: credential)
                 signedIn = true
+                stage = .consent
                 _ = try await saveAgreement(agreement)
                 await refresh()
             }
         } catch {
             if (error as? ASAuthorizationError)?.code != .canceled {
-                message = "Anmeldung fehlgeschlagen. Bitte erneut versuchen. / Sign-in failed. Please try again."
+                let failure = ParentSignInFailure(error: error, stage: stage)
+                message = failure.message
+                Logger(subsystem: "com.dessdynamics.watchlearn", category: "ParentAccount")
+                    .error("sign_in_failed code=\(failure.supportCode, privacy: .public)")
             }
         }
     }
@@ -137,6 +183,7 @@ final class ParentAccount {
         allowance = value
         guard value.consent?.isCurrent == true, value.consent?.voice == true else { throw ManagedAccountError.agreementRequired }
         guard value.available else { throw ManagedAccountError.unavailable }
+        guard !value.active else { throw ManagedAccountError.sessionAlreadyActive }
         guard value.unlimited || (value.remainingSeconds ?? 0) > 0 else { throw ManagedAccountError.trialExhausted }
         return .managedLive(base, try await idToken())
     }

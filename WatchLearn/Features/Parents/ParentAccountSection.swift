@@ -4,6 +4,7 @@ import AuthenticationServices
 struct ParentAccountSection: View {
     @Bindable var account = ParentAccount.shared
     @Bindable var preferences: ParentPreferences
+    let onSignIn: () -> Void
     let onReviewAgreement: () -> Void
     let onDeleteAccount: () -> Void
     var body: some View {
@@ -11,7 +12,8 @@ struct ParentAccountSection: View {
             if account.signedIn {
                 Label(copy("Mit Apple angemeldet", "Signed in with Apple"), systemImage: "person.crop.circle.badge.checkmark")
                 if let allowance = account.allowance {
-                    Text(allowance.unlimited ? copy("Unbegrenzter Testzugang", "Unlimited test access")
+                    Text(allowance.active ? copy("Gespräch läuft oder wird beendet. Die reservierte Testzeit wird danach abgerechnet.", "A conversation is active or finishing. Reserved trial time is settled when it ends.")
+                         : allowance.unlimited ? copy("Unbegrenzter Testzugang", "Unlimited test access")
                          : copy("Testzeit übrig: ", "Trial remaining: ") + remaining(allowance.remainingSeconds ?? 0))
                         .accessibilityIdentifier("account-allowance")
                     if !allowance.unlimited && allowance.remainingSeconds == 0 && !allowance.active {
@@ -40,25 +42,9 @@ struct ParentAccountSection: View {
             } else {
                 Text(copy("Mit Apple anmelden und 5 Minuten kostenlos mit deinem Zeithelden sprechen. Kein eigener API-Key nötig.", "Sign in with Apple for 5 free minutes with your Time Hero. No API key needed."))
                     .accessibilityIdentifier("free-trial-introduction")
-                if preferences.hasCurrentAgreement {
-                SignInWithAppleButton(.signIn, onRequest: {
-                    account.prepare($0, agreement: preferences.agreementAcceptance?.document)
-                }, onCompletion: { result in
-                    Task {
-                        await account.complete(result)
-                        if account.signedIn {
-                            preferences.cloudVoiceMode = .managedAccount
-                            if let document = preferences.agreementAcceptance?.document {
-                                preferences.recordAgreement(document, accountID: account.accountID,
-                                    receipt: account.allowance?.consent)
-                            }
-                        }
-                    }
-                })
+                ParentAppleSignInButton(action: onSignIn)
                 .frame(height: 48)
-                .disabled(!account.isConfigured || account.busy)
-                .accessibilityIdentifier("parent-apple-sign-in")
-                }
+                .disabled(account.busy)
                 Button(copy("Datenschutz vor der Anmeldung prüfen", "Review privacy before sign-in"), action: onReviewAgreement)
                     .accessibilityIdentifier("parent-review-agreement")
                 if !account.isConfigured {
@@ -75,6 +61,28 @@ struct ParentAccountSection: View {
     }
     private func copy(_ de: String, _ en: String) -> String { preferences.language == .german ? de : en }
     private func remaining(_ seconds: Int) -> String { String(format: "%d:%02d", seconds / 60, seconds % 60) }
+}
+
+/// Apple's native button appearance, with consent routing before authorization.
+private struct ParentAppleSignInButton: UIViewRepresentable {
+    let action: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+    func makeUIView(context: Context) -> ASAuthorizationAppleIDButton {
+        let button = ASAuthorizationAppleIDButton(type: .signIn, style: .black)
+        button.accessibilityIdentifier = "parent-apple-sign-in"
+        button.addTarget(context.coordinator, action: #selector(Coordinator.tap), for: .touchUpInside)
+        return button
+    }
+    func updateUIView(_ button: ASAuthorizationAppleIDButton, context: Context) {
+        context.coordinator.action = action
+    }
+
+    final class Coordinator: NSObject {
+        var action: () -> Void
+        init(action: @escaping () -> Void) { self.action = action }
+        @objc func tap() { action() }
+    }
 }
 
 struct ParentAccountDeletionView: View {

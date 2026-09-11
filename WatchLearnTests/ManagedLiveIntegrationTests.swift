@@ -1,5 +1,6 @@
 import Foundation
 import AudioToolbox
+import UIKit
 @preconcurrency import WebRTC
 import XCTest
 @testable import WatchLearn
@@ -9,6 +10,143 @@ import XCTest
 /// the physical microphone/speaker is replaced by a deterministic audio device.
 @MainActor
 final class ManagedLiveIntegrationTests: XCTestCase {
+    /// Real provider output with silent synthetic input: verifies the hero
+    /// greets first in both languages without transmitting microphone audio.
+    func testSignedInParentGreetsAndAdvancesInBothLanguages() async throws {
+        guard ProcessInfo.processInfo.environment["WATCHLEARN_RUN_SIGNED_IN_GREETING"] == "1" else {
+            throw XCTSkip("Explicitly enable the paid signed-in greeting test.")
+        }
+        // External synthetic fixtures are copied to the device's temporary
+        // directory explicitly; no microphone or real child speech is used.
+        let fixtures = try ["de", "en"].map {
+            try Data(contentsOf: FileManager.default.temporaryDirectory.appendingPathComponent("synthetic-answer-\($0).pcm"))
+        }
+        for _ in 0..<100 where UIApplication.shared.applicationState != .active {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        guard UIApplication.shared.applicationState == .active else {
+            throw XCTSkip("The signed-in test host must be in the foreground.")
+        }
+        for (index, language) in [RealtimeCoachLanguage.german, .english].enumerated() {
+            let credential = try await ParentAccount.shared.voiceCredential()
+            guard case let .managedLive(base, token) = credential else {
+                XCTFail("Expected managed account"); return
+            }
+            let audio = SyntheticWebRTCAudioDevice()
+            let factory = RTCPeerConnectionFactory(encoderFactory: nil, decoderFactory: nil, audioDevice: audio)
+            let service = ManagedLiveSession(baseURL: base, token: token, factory: factory)
+            var greeting = ""
+            var speaking = false
+            var sawSpeech = false
+            var grades: [(Int, Bool)] = []
+            var advances: [Int] = []
+            let observer = Task { @MainActor in
+                for await event in service.events {
+                    if case let .transcriptDelta(speaker, text) = event, speaker == .coach { greeting += text }
+                    if case .assistantAudio = event { speaking = true; sawSpeech = true }
+                    if case .assistantAudioFinished = event { speaking = false }
+                    if case let .liveClockAnswerReported(_, result, id) = event { grades.append((id, result.correct == true)) }
+                    if case let .liveAdvanceRequested(id) = event { advances.append(id) }
+                }
+            }
+            do {
+                try await service.open(language: language, safetyIdentifier: .init(stableID: "silent-greeting-test"))
+                try await service.setChallenge(.init(questionID: 1, hour: 3, minute: 0, difficulty: "fullHour", language: language))
+                try await service.startVoice(authorizedBy: service.authorizeCaptureStart())
+                try await wait(20) {
+                    greeting.lowercased().contains(language == .german ? "zeitheld" : "time hero")
+                        && audio.nonSilentOutputFrames > 4800
+                }
+                print("FIRST_GREETING language=\(language.rawValue) before_input=true audible_output=true")
+                try await wait(15) { sawSpeech && !speaking }
+                audio.say(fixtures[index])
+                try await wait(35) { !advances.isEmpty }
+                XCTAssertEqual(grades.first?.0, 1)
+                XCTAssertEqual(grades.first?.1, true)
+                XCTAssertEqual(advances, [1])
+                print("LIVE_PROGRESS language=\(language.rawValue) correct=true automatic_next=true")
+                // Repeat the same spoken time on a different clock: it must
+                // be graded wrong, with no automatic progress or extra star.
+                sawSpeech = false
+                try await service.setChallenge(.init(questionID: 2, hour: 4, minute: 0, difficulty: "fullHour", language: language))
+                try await wait(15) { sawSpeech && !speaking }
+                audio.say(fixtures[index])
+                try await wait(35) { grades.contains { $0.0 == 2 } }
+                XCTAssertEqual(grades.first { $0.0 == 2 }?.1, false)
+                try await Task.sleep(for: .seconds(4))
+                XCTAssertEqual(advances, [1])
+                print("LIVE_PROGRESS language=\(language.rawValue) wrong_stays_on_clock=true")
+                await service.disconnect()
+                observer.cancel(); audio.finish()
+                await ParentAccount.shared.refresh()
+                XCTAssertEqual(ParentAccount.shared.allowance?.active, false)
+            } catch {
+                await service.disconnect(); observer.cancel(); audio.finish()
+                let failure = error as NSError
+                XCTFail("Greeting failed: \(failure.domain) code=\(failure.code)")
+                return
+            }
+        }
+    }
+
+    /// Explicit real-device regression: includes native microphone/audio activation,
+    /// which transport-only handshake checks do not exercise. Never logs speech.
+    func testSignedInParentNativeVoiceStartAndStop() async throws {
+        guard ProcessInfo.processInfo.environment["WATCHLEARN_RUN_SIGNED_IN_VOICE_START"] == "1" else {
+            throw XCTSkip("Explicitly enable the paid signed-in native voice-start test.")
+        }
+        guard SystemMicrophonePermissionService().currentPermission() == .granted else {
+            throw XCTSkip("An adult must grant microphone permission before this test.")
+        }
+        // App-hosted unit tests may run before the host becomes foreground.
+        // Do not spend a session on an iOS background-audio rejection.
+        for _ in 0..<100 where UIApplication.shared.applicationState != .active {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        guard UIApplication.shared.applicationState == .active else {
+            throw XCTSkip("Use the foreground voice-button UI test on this device.")
+        }
+        let credential = try await ParentAccount.shared.voiceCredential()
+        guard case let .managedLive(base, token) = credential else {
+            XCTFail("Expected the parent's managed account"); return
+        }
+        let service = ManagedLiveSession(baseURL: base, token: token)
+        service.diagnostics = { print("NATIVE_VOICE \($0)") }
+        var greeted = false
+        let observer = Task { @MainActor in
+            for await event in service.events {
+                if case let .transcriptDelta(speaker, text) = event, speaker == .coach, !text.isEmpty {
+                    greeted = true
+                }
+            }
+        }
+        defer { observer.cancel() }
+        do {
+            print("NATIVE_VOICE opening")
+            try await service.open(language: .german, safetyIdentifier: .init(stableID: "native-voice-start-test"))
+            print("NATIVE_VOICE transport_connected")
+            try await service.setChallenge(.init(questionID: 1, hour: 3, minute: 0, difficulty: "fullHour", language: .german))
+            print("NATIVE_VOICE activating_audio")
+            try await service.startVoice(authorizedBy: service.authorizeCaptureStart())
+            print("NATIVE_VOICE audio_started")
+            XCTAssertTrue(RTCAudioSession.sharedInstance().isAudioEnabled)
+            XCTAssertTrue(RTCAudioSession.sharedInstance().categoryOptions.contains(.defaultToSpeaker))
+            XCTAssertFalse(RTCAudioSession.sharedInstance().currentRoute.outputs.contains { $0.portType == .builtInReceiver })
+            try await wait(15) { greeted }
+            print("NATIVE_VOICE greeting_received speaker_route_confirmed")
+            service.stopAll()
+            await service.disconnect()
+            XCTAssertFalse(RTCAudioSession.sharedInstance().isAudioEnabled)
+            await ParentAccount.shared.refresh()
+            XCTAssertEqual(ParentAccount.shared.allowance?.active, false)
+            print("NATIVE_VOICE audio_stopped provider_closed account_settled")
+        } catch {
+            await service.disconnect()
+            let error = error as NSError
+            XCTFail("Native voice start failed: \(error.domain) code=\(error.code)")
+        }
+    }
+
     /// Uses the actual signed-in parent and the production native audio device.
     /// Opens transport only: microphone capture is never enabled by this test.
     func testSignedInParentNativeAudioHandshake() async throws {

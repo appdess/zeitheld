@@ -393,6 +393,7 @@ final class VoiceCoachCoordinator {
     var onLiveClockAnswer: ((ClockAnswerReport, Int) -> Void)?
     var onSpokenCorrectAnswerFeedbackFinished: ((Int, String) -> Void)?
     var onSpokenAutoAdvanceCancelled: (() -> Void)?
+    var onLiveAdvanceRequested: ((Int) -> Void)?
 
     #if DEBUG
     func showCoachSpeakingStatusForUITesting() {
@@ -737,6 +738,9 @@ final class VoiceCoachCoordinator {
             onSpokenCorrectAnswerFeedbackFinished?(questionID, responseID)
         case let .liveClockAnswerReported(report, _, questionID):
             onLiveClockAnswer?(report, questionID)
+        case let .liveAdvanceRequested(questionID):
+            guard isSessionActive, !isStopping else { return }
+            onLiveAdvanceRequested?(questionID)
         case let .clockAnswerReported(report, _):
             onClockAnswer?(report)
         case let .serverError(error):

@@ -3,6 +3,21 @@ import XCTest
 
 @MainActor
 final class ParentAgreementTests: XCTestCase {
+    func testSignInDiagnosticsNeverContainProviderDetails() {
+        let error = NSError(domain: NSURLErrorDomain, code: -1009,
+                            userInfo: [NSLocalizedDescriptionKey: "private-token-and-account-details"])
+        let failure = ParentSignInFailure(error: error, stage: .firebase)
+        XCTAssertEqual(failure.supportCode, "AUTH-FIREBASE-NETWORK--1009")
+        XCTAssertFalse(failure.message.contains("private-token"))
+    }
+
+    func testCancelledAppleAuthorizationClearsBusyWithoutReportingFailure() async {
+        let account = ParentAccount()
+        await account.completeApple(.failure(NSError(domain: "com.apple.AuthenticationServices.AuthorizationError", code: 1001)))
+        XCTAssertFalse(account.busy)
+        XCTAssertNil(account.message)
+    }
+
     private func document() -> ParentAgreement {
         ParentAgreement(locale: "de", guardian: true, privacyAcknowledged: true,
                         termsAccepted: true, voice: true, hero: false, adultTestOnly: true)

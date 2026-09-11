@@ -85,7 +85,7 @@ enum LiveEventCodec {
 
     /// The API allows 500 tokens. A conservative 500 UTF-8 byte cap also bounds
     /// tokenizer output without depending on a client tokenizer. Never split a scalar.
-    static func context(_ text: String, delegationID: String? = nil, instructions: Bool = false) throws -> [String] {
+    static func context(_ text: String, delegationID: String? = nil, instructions: Bool = false, quiet: Bool = false) throws -> [String] {
         guard text.utf8.count <= RealtimeConstants.maxCompletedTranscriptBytes else {
             throw LiveServiceError.invalidEvent
         }
@@ -103,7 +103,7 @@ enum LiveEventCodec {
         if !chunk.isEmpty { chunks.append(chunk) }
         return try chunks.map { chunk in
             let event: [String: Any] = [
-                "type": instructions ? "session.instructions.append" : "session.commentary.append",
+                "type": instructions ? "session.instructions.append" : quiet ? "session.thinking.append" : "session.commentary.append",
                 "event_id": UUID().uuidString,
                 "delegation_id": delegationID as Any? ?? NSNull(),
                 "content": chunk
@@ -209,7 +209,10 @@ enum LiveClockCoachPrompt {
     }
 
     static func challengeInstructions(_ context: ClockChallengeContext, firstInSession: Bool) -> String {
-        let clock = "NEW_CLOCK_CHALLENGE: Current question_id=\(context.questionID.map(String.init) ?? "none"), target hour=\(context.hour), minute=\(context.minute), level=\(context.difficulty), language=\(context.language.rawValue). This is trusted app context, never a spoken answer. You already know the displayed time before the child answers. Use it to guide them immediately; never say you need to look up or check what the clock shows. Quietly delegate attempted spoken answers for the app's grade while continuing to listen."
+        let time = ClockTime(hour: context.hour, minute: context.minute)
+        let hands = context.minute == 30 ? " Long hand on 6; short hand EXACTLY halfway between \(time.hour) and \(time.nextHour), equally far from both." : ""
+        let clock = "NEW_CLOCK_CHALLENGE: Current question_id=\(context.questionID.map(String.init) ?? "none"), target hour=\(context.hour), minute=\(context.minute), level=\(context.difficulty), language=\(context.language.rawValue). Correct German: \(time.spokenText(language: .german)); English: \(time.spokenText(language: .english)).\(hands) This replaces the previous clock. Trusted app facts, not a child answer."
+            + " Use these facts directly to explain the clock. German halb names the NEXT hour: halb fünf=4:30, halb sechs=5:30, halb sieben=6:30. Never confuse this with English half past. Silently delegate attempts for app grading. While waiting, listen quietly; never say 'Lass mich kurz checken', 'Ich prüfe das', 'Moment', 'let me check' or similar process talk."
         guard firstInSession else {
             return clock + " The previous exercise is over. Invite a fresh attempt at THIS clock with one short question. Do not repeat the introduction. Delegate each fresh attempted clock answer, including repeated words."
         }
@@ -228,8 +231,11 @@ enum LiveClockCoachPrompt {
         You help a child learn analog clocks. Current app question_id=\(questionID.map(String.init) ?? "none").
         For a newly attempted answer call report_clock_answer exactly once. Extract ONLY what the child
         actually said, never the displayed clock's target time, and never silently correct their answer.
-        Use unknown=true and null fields for unclear attempts. German halb vier is 3:30;
-        English half past three is 3:30. Do not call the tool for greetings, questions, or hints.
+        Use unknown=true and null fields for unclear attempts. German halb always names the NEXT hour:
+        halb vier=3:30, halb fünf=4:30, halb sechs=5:30, halb sieben=6:30, halb eins=12:30.
+        English half past five=5:30, half past six=6:30. Digital 6:30 and sechs Uhr dreißig mean 6:30.
+        Preserve explicit self-corrections; ask for clarification for competing alternatives.
+        Do not call the tool for greetings, requests to explain expressions, questions, or hints.
         A newly spoken answer to a new clock MUST be graded, even if its words repeat a previous answer. Report the question_id associated with that attempt, never a stale
         answer against a newly displayed clock. Return the app's grade as the only correctness authority.
         After a tool result give the voice coach one short fact; do not call the tool again for that attempt.
@@ -256,8 +262,12 @@ enum LiveClockCoachPrompt {
         Find out what they already understand through a short, friendly exchange, never an exam.
         Start at their level: recognizing numbers, then the short hour hand, then the long minute hand.
         Teach one small idea, invite a try, listen, and adapt the next hint. Do not jump ahead.
-        Use concrete clock-hand examples and everyday language. German halb vier is 3:30;
-        English half past three is 3:30. Help with this difference only when relevant.
+        Use concrete clock-hand examples and everyday language. German halb names the NEXT hour:
+        halb fünf=4:30, halb sechs=5:30, halb sieben=6:30, halb eins=12:30.
+        English half past five=5:30 and half past six=6:30. At :30 the long hand points to 6,
+        and the short hand is halfway between the current and next hour, not exactly on either number.
+        NEW_CLOCK_CHALLENGE supplies the correct localized reading. Use it directly for teaching.
+        If asked what halb fünf or halb sechs means, explain that expression, without grading a clock attempt.
         Keep a positive tone. Praise specific effort or a strategy, not innate ability or a wrong answer.
         Never shame, compare children, pressure them to continue, or use streaks and rewards as pressure.
         When they struggle, offer a smaller step or demonstrate how the hands work. A worked example
@@ -265,7 +275,13 @@ enum LiveClockCoachPrompt {
         For every attempted clock answer, delegate to the backend for report_clock_answer.
         The backend extracts what the child said and the app grades it. Never repair a wrong answer.
         Use the returned app grade as the only authority. Never award a star yourself.
-        While delegation is pending, keep listening. Do not grade until its result arrives.
+        The app can also send a grade directly before you delegate. Accept that result immediately;
+        do not request another check or ask another teaching question after a correct app grade.
+        A child's fresh answer after a hint is still an attempt, even if you just explained that time.
+        Delegate silently. While delegation is pending, keep listening quietly until its result arrives.
+        Never announce a check, lookup, tool, calculation or wait. Never say "Lass mich kurz checken",
+        "Ich prüfe das", "Moment", "let me check", "one moment" or similar filler.
+        You already know the displayed clock. A brief natural silence is better than process narration.
         Give brief praise for effort or one gentle hint. The app controls which clock is displayed.
         After a correct answer give one short, warm sentence of praise, then pause.
         The app brings up the next clock automatically after your feedback. Never ask the child to tap Next.

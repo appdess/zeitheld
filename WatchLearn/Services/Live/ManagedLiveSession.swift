@@ -31,8 +31,9 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
     private var disconnectTask: Task<Void, Never>?
     private var challenge: ClockChallengeContext?
     private var revision: UInt64 = 0
-    private var transcript = ""
-    private var lastTranscriptAt = Date.distantPast
+    private var transcriptBuffer = LiveClockTranscriptBuffer()
+    private var localAnswerTask: Task<Void, Never>?
+    private var acceptsSpokenAnswers = false
     var diagnostics: ((String) -> Void)?
     private var pendingDelegations: [(String, UInt64)] = []
     private var connectionGeneration: UInt64 = 0
@@ -175,7 +176,8 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
     func setChallenge(_ value: ClockChallengeContext) async throws {
         guard ready, let questionID = value.questionID else { throw RealtimeServiceError.notConnected }
         let firstInSession = challenge == nil
-        revision &+= 1; challenge = value; transcript = ""; pendingDelegations.removeAll()
+        revision &+= 1; challenge = value; transcriptBuffer.reset(); pendingDelegations.removeAll()
+        localAnswerTask?.cancel(); localAnswerTask = nil
         advanceGate.cancel(); solvedQuestionID = nil
         delegationTask?.cancel(); delegationTask = nil
         let text = LiveClockCoachPrompt.challengeInstructions(value, firstInSession: firstInSession)
@@ -201,6 +203,7 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
         // That worker also takes the configuration lock; release it first.
         try authorization.validate(value)
         audio.isAudioEnabled = true
+        acceptsSpokenAnswers = true
         microphone?.isEnabled = true
         remoteTracks.forEach { $0.isEnabled = true }
         startObservingAudioActivity()
@@ -240,7 +243,7 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
             ownsAudioActivation = false
         }
         localSessionID = nil; microphone = nil; remoteTracks.removeAll()
-        challenge = nil; transcript = ""; handledDelegations.removeAll(); sentVoiceReady = false
+        challenge = nil; transcriptBuffer.reset(); handledDelegations.removeAll(); sentVoiceReady = false
         closing = false
         continuation.yield(.connectionStateChanged(.disconnected))
     }
@@ -300,7 +303,12 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
 
     func authorizeCaptureStart() -> RealtimeAudioCaptureAuthorization { authorization.issue() }
     func startCapture(authorizedBy value: RealtimeAudioCaptureAuthorization, onPCM16Chunk: @escaping @Sendable (Data) -> Void, onCaptureFailure: @escaping @Sendable (RealtimeAudioEngineError) -> Void) async throws { try await startVoice(authorizedBy: value) }
-    func stopCapture() { authorization.revoke(); microphone?.isEnabled = false }
+    func stopCapture() {
+        acceptsSpokenAnswers = false
+        localAnswerTask?.cancel(); localAnswerTask = nil
+        transcriptBuffer.reset()
+        authorization.revoke(); microphone?.isEnabled = false
+    }
     func stopPlayback() { remoteTracks.forEach { $0.isEnabled = false }; RTCAudioSession.sharedInstance().isAudioEnabled = false }
     func stopAll() {
         audioActivityTask?.cancel(); audioActivityTask = nil
@@ -341,7 +349,10 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
         case "session.input_transcript.delta", "session.output_transcript.delta":
             guard let delta = event["delta"] as? String, delta.utf8.count <= 10000 else { return }
             let child = type == "session.input_transcript.delta"
-            if child { transcript = String((transcript + delta).suffix(3000)); lastTranscriptAt = Date() }
+            if child, acceptsSpokenAnswers {
+                transcriptBuffer.append(delta, at: ProcessInfo.processInfo.systemUptime)
+                scheduleLocalAnswer()
+            }
             continuation.yield(.transcriptDelta(speaker: child ? .child : .coach, text: delta))
         case "session.delegation.created":
             guard let delegation = event["delegation"] as? [String: Any], delegation["target"] as? String == "client",
@@ -364,10 +375,10 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
     }
 
     private func delegate(id: String, revision captured: UInt64) async {
-        guard let sessionID = localSessionID, let challenge, let questionID = challenge.questionID else { return }
+        guard acceptsSpokenAnswers, let sessionID = localSessionID, let challenge, let questionID = challenge.questionID else { return }
         do {
             guard solvedQuestionID != questionID else {
-                for event in try LiveEventCodec.context("This clock is already solved. Pause for the next NEW_CLOCK_CHALLENGE; no further grade or tap is needed.", delegationID: id) { try send(event) }
+                for event in try LiveEventCodec.context("This clock is already solved. Pause for the next NEW_CLOCK_CHALLENGE; no further grade or tap is needed.", delegationID: id, quiet: true) { try send(event) }
                 return
             }
             // Live delegates before its asynchronous transcript necessarily finishes.
@@ -377,21 +388,28 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
             while Date().timeIntervalSince(started) < 3 {
                 try await Task.sleep(for: .milliseconds(50))
                 guard revision == captured else { return }
-                if !transcript.isEmpty && Date().timeIntervalSince(lastTranscriptAt) >= 0.6
-                    && Date().timeIntervalSince(started) >= 1 { break }
+                if !transcriptBuffer.text.isEmpty && ProcessInfo.processInfo.systemUptime - transcriptBuffer.changedAt >= 1 { break }
             }
             guard revision == captured else { return }
-            let text = transcript
+            let text = transcriptBuffer.take()
             diagnostics?("delegation chars=\(text.count) question=\(questionID)")
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                for event in try LiveEventCodec.context("No new attempted answer. Give one short clock hint if asked, then wait and listen.", delegationID: id) { try send(event) }
+                for event in try LiveEventCodec.context("No ungraded new answer remains. Follow the latest app grade; keep listening without repeating feedback.", delegationID: id, quiet: true) { try send(event) }
                 return
             }
-            transcript = "" // Consume fresh speech once; later hints cannot regrade an old answer.
-            let data = try await request("v1/sessions/\(sessionID)/answer", body: ["transcript": text, "questionID": questionID, "delegationID": id])
+            let answer: ExtractedAnswer
+            if let report = SpokenClockAnswerParser.parse(text, language: challenge.language) {
+                // Common clock expressions need no second model or network hop.
+                // Parsing never receives the target time and cannot repair a wrong answer.
+                answer = .init(questionID: questionID, attempt: true, hour: report.hour, minute: report.minute, unknown: false)
+                diagnostics?("answer_path=local question=\(questionID)")
+            } else {
+                let data = try await request("v1/sessions/\(sessionID)/answer", body: ["transcript": text, "questionID": questionID, "delegationID": id])
+                answer = try JSONDecoder().decode(ExtractedAnswer.self, from: data)
+                diagnostics?("answer_path=fallback question=\(questionID)")
+            }
             try Task.checkCancellation()
             guard captured == revision, ready else { return }
-            let answer = try JSONDecoder().decode(ExtractedAnswer.self, from: data)
             diagnostics?("extracted attempt=\(answer.attempt) unknown=\(answer.unknown) question=\(questionID)")
             guard answer.questionID == questionID else { return }
             if !answer.attempt {
@@ -399,24 +417,52 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
                 return
             }
             let report = ClockAnswerReport(hour: answer.hour, minute: answer.minute, unknown: answer.unknown)
-            let result = await DeterministicClockAnswerHandler().handle(report: report, challenge: challenge)
-            guard captured == revision, ready else { return }
-            let output: String
-            if result.correct == true {
-                output = "App grade for question \(questionID): correct. Give one short, warm sentence of praise, then pause. The app will show the next clock automatically after your feedback. Do not ask the child to tap Next. Wait for NEW_CLOCK_CHALLENGE before describing another clock. This grading task is complete."
-            } else {
-                output = "App grade for question \(questionID): not correct yet. No star was awarded. Give one gentle hint about the hands and invite another attempt. This grading task is complete. Delegate the next attempted answer again."
-            }
-            for event in try LiveEventCodec.context(output, delegationID: id) { try send(event) }
-            if result.accepted, result.correct == true {
-                solvedQuestionID = questionID
-                advanceGate.arm(questionID: questionID, at: ProcessInfo.processInfo.systemUptime)
-            }
-            continuation.yield(.liveClockAnswerReported(report, result, questionID: questionID))
+            try await applyGrade(report, challenge: challenge, revision: captured, delegationID: id)
         } catch {
             guard !Task.isCancelled, captured == revision, ready else { return }
             for event in (try? LiveEventCodec.context("The answer checker is unavailable. Do not grade. Invite the child to use the answer buttons.", delegationID: id)) ?? [] { try? send(event) }
         }
+    }
+
+
+    private func scheduleLocalAnswer() {
+        localAnswerTask?.cancel()
+        let captured = revision
+        localAnswerTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(1050)) } catch { return }
+            guard let self, self.ready, self.acceptsSpokenAnswers, self.revision == captured,
+                  let challenge = self.challenge, let questionID = challenge.questionID,
+                  self.solvedQuestionID != questionID,
+                  let report = self.transcriptBuffer.localAnswer(language: challenge.language,
+                      at: ProcessInfo.processInfo.systemUptime) else { return }
+            _ = self.transcriptBuffer.take()
+            self.localAnswerTask = nil
+            self.diagnostics?("answer_path=local question=\(questionID)")
+            do { try await self.applyGrade(report, challenge: challenge, revision: captured, delegationID: nil) }
+            catch { /* Transport callbacks own connection recovery. */ }
+        }
+    }
+
+    private func applyGrade(_ report: ClockAnswerReport, challenge: ClockChallengeContext,
+                            revision captured: UInt64, delegationID: String?) async throws {
+        guard acceptsSpokenAnswers, ready, captured == revision,
+              let questionID = challenge.questionID, solvedQuestionID != questionID else { return }
+        let result = await DeterministicClockAnswerHandler().handle(report: report, challenge: challenge)
+        guard captured == revision, ready, acceptsSpokenAnswers, solvedQuestionID != questionID else { return }
+        let heard = report.hour.flatMap { hour in report.minute.map { "\(hour):\(String(format: "%02d", $0))" } } ?? "unclear"
+        let facts = "App heard \(heard); displayed clock \(challenge.hour):\(String(format: "%02d", challenge.minute)). "
+        let output: String
+        if result.correct == true {
+            output = facts + "App grade for question \(questionID): correct. Say a short warm confirmation directly, without checking or waiting phrases, then pause for the app's next NEW_CLOCK_CHALLENGE. Do not ask for a tap."
+        } else {
+            output = facts + "App grade for question \(questionID): not correct yet. Give one gentle clock-hand hint, not a checking announcement. Invite another attempt on this SAME clock and delegate that fresh answer."
+        }
+        for event in try LiveEventCodec.context(output, delegationID: delegationID) { try send(event) }
+        if result.accepted, result.correct == true {
+            solvedQuestionID = questionID
+            advanceGate.arm(questionID: questionID, at: ProcessInfo.processInfo.systemUptime)
+        }
+        continuation.yield(.liveClockAnswerReported(report, result, questionID: questionID))
     }
 
     private func startObservingAudioActivity() {

@@ -22,6 +22,7 @@
 		41F0C293F00D63E3D795165F /* AnalogClockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F25414C07D109CACC82E73D5 /* AnalogClockView.swift */; };
 		456862CD66C882FF95A63C20 /* LiveOpenAINativeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A02E6F595B29C51F6D74E739 /* LiveOpenAINativeTests.swift */; };
 		46C421EE2B6938478F1EA2C7 /* LiveConnectionHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69AC8D339A47F0E344AF65C6 /* LiveConnectionHistory.swift */; };
+		47DBEDC9E774B89A610CA384 /* SpokenClockAnswerParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA6A3C5E69F68027295B2E13 /* SpokenClockAnswerParser.swift */; };
 		4856BB1140FD351A07140C67 /* HeroCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = C41065876B23CECEFE9179A8 /* HeroCredential.swift */; };
 		48DE6BEE1E5AEAADEC98BD98 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 42B40EBC6668621AA5A542AB /* FirebaseAuth */; };
 		4F8B69AA7C99D372A89A304B /* RealtimeCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52571FBCD184645BE8DE968D /* RealtimeCodecTests.swift */; };
@@ -42,6 +43,7 @@
 		75DB008A7B35665A2844B33A /* LearningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFD9A601180C36E761DCB16 /* LearningView.swift */; };
 		768B79FD8DDF490C85548625 /* TimeLearningLevel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15A1928B95EA4A09DE7D0B92 /* TimeLearningLevel.swift */; };
 		79889F99BA24BCCC5B84A599 /* HeroTemporaryAudioCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E41BD9E70F04DAE7BC0CA81 /* HeroTemporaryAudioCleanupTests.swift */; };
+		7A801C9A6AD911E48B3E2B5B /* SpokenClockAnswerParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7D66BB493E8AB1508946B22 /* SpokenClockAnswerParserTests.swift */; };
 		7C3ADCB702012E49712B43FE /* RealtimeTokenProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB153D6510088A464A773C67 /* RealtimeTokenProviderTests.swift */; };
 		82FCA341118E8527B875C372 /* ParentPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = D13206FAAE127C6E8A1648C7 /* ParentPreferences.swift */; };
 		85FA2DB4226B7274F823B3C9 /* HeroLabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 510703946B8CC6E212B65E7D /* HeroLabView.swift */; };
@@ -177,6 +179,7 @@
 		B18F867ACED4D2E023CE5431 /* TimeLearningEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeLearningEngine.swift; sourceTree = "<group>"; };
 		B1C7B93F2A9F7EC2DD1151BD /* WatchLearnUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WatchLearnUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B584C6662F7A4D8B03205CC7 /* JourneyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JourneyView.swift; sourceTree = "<group>"; };
+		BA6A3C5E69F68027295B2E13 /* SpokenClockAnswerParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpokenClockAnswerParser.swift; sourceTree = "<group>"; };
 		BB599291D950D107E8AAFAF3 /* RealtimeAudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeAudioEngine.swift; sourceTree = "<group>"; };
 		C3DBE72AAA883B00FD4D60DA /* RealtimeEventCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeEventCodec.swift; sourceTree = "<group>"; };
 		C3F53B8F7682A524781948E0 /* HeroCloudUsageBudget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroCloudUsageBudget.swift; sourceTree = "<group>"; };
@@ -196,6 +199,7 @@
 		EC6D1869C0CE8F0EE33357DD /* HeroImageStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroImageStoreTests.swift; sourceTree = "<group>"; };
 		F1245753068DABAC32064BD9 /* LearningModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningModels.swift; sourceTree = "<group>"; };
 		F25414C07D109CACC82E73D5 /* AnalogClockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalogClockView.swift; sourceTree = "<group>"; };
+		F7D66BB493E8AB1508946B22 /* SpokenClockAnswerParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpokenClockAnswerParserTests.swift; sourceTree = "<group>"; };
 		F9A3E7170132398D4FBAAB5A /* HeroLabViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroLabViewModel.swift; sourceTree = "<group>"; };
 		FBEC3A820B480D8BC5E77EBD /* WatchLearnUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLearnUITests.swift; sourceTree = "<group>"; };
 		FF6AFBF85C3A1BDBEB51FBE0 /* RealtimeTokenProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeTokenProvider.swift; sourceTree = "<group>"; };
@@ -247,6 +251,7 @@
 				916E69658642410ABF3289C8 /* LearningLanguage.swift */,
 				F1245753068DABAC32064BD9 /* LearningModels.swift */,
 				73D1093A2D4AA44794C68FFD /* ProjectLinks.swift */,
+				BA6A3C5E69F68027295B2E13 /* SpokenClockAnswerParser.swift */,
 				B18F867ACED4D2E023CE5431 /* TimeLearningEngine.swift */,
 				15A1928B95EA4A09DE7D0B92 /* TimeLearningLevel.swift */,
 			);
@@ -456,6 +461,7 @@
 				52571FBCD184645BE8DE968D /* RealtimeCodecTests.swift */,
 				88C31ABBF93E136A2B272E04 /* RealtimeServiceTests.swift */,
 				DB153D6510088A464A773C67 /* RealtimeTokenProviderTests.swift */,
+				F7D66BB493E8AB1508946B22 /* SpokenClockAnswerParserTests.swift */,
 				58096B36262EB9E132B6BCCE /* TimeLearningEngineTests.swift */,
 				4F145614B31BB812ADFDB563 /* VoiceCoachCoordinatorSecurityTests.swift */,
 			);
@@ -643,6 +649,7 @@
 				4F8B69AA7C99D372A89A304B /* RealtimeCodecTests.swift in Sources */,
 				5EB12BB712DF593E3B6CBB32 /* RealtimeServiceTests.swift in Sources */,
 				7C3ADCB702012E49712B43FE /* RealtimeTokenProviderTests.swift in Sources */,
+				7A801C9A6AD911E48B3E2B5B /* SpokenClockAnswerParserTests.swift in Sources */,
 				EDA4D541A4F32CFEE774E332 /* TimeLearningEngineTests.swift in Sources */,
 				95192F4C29F71F2429762E13 /* VoiceCoachCoordinatorSecurityTests.swift in Sources */,
 			);
@@ -699,6 +706,7 @@
 				6B0D15586CC8821F089E7B81 /* RealtimeWebSocketTransport.swift in Sources */,
 				C45C4A2FBDAF89B89C947127 /* RootView.swift in Sources */,
 				106698B216CF21F9BB550209 /* SecureStore.swift in Sources */,
+				47DBEDC9E774B89A610CA384 /* SpokenClockAnswerParser.swift in Sources */,
 				60C24527CEB753E6DEF9F65C /* TimeLearningEngine.swift in Sources */,
 				768B79FD8DDF490C85548625 /* TimeLearningLevel.swift in Sources */,
 				EB4370B429CF68AF2C8FFB86 /* VoiceCoachCoordinator.swift in Sources */,
@@ -743,7 +751,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = WatchLearn/Resources/WatchLearn.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = WatchLearn/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -802,7 +810,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = WatchLearn/Resources/WatchLearn.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = WatchLearn/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

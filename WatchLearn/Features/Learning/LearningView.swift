@@ -99,6 +99,18 @@ public struct LearningView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .scrollBounceBehavior(.basedOnSize)
+                .background {
+                    GeometryReader { viewport in
+                        Color.clear.task {
+                            // On small phones, start with the clock and its
+                            // controls; the hero and progress stay above for scrolling.
+                            if viewport.size.height < 600 {
+                                await Task.yield()
+                                scrollProxy.scrollTo("current-clock-scroll-target", anchor: .top)
+                            }
+                        }
+                    }
+                }
                 .onChange(of: viewModel.question.id) { _, _ in
                     withAnimation(.easeInOut(duration: 0.3)) {
                         scrollProxy.scrollTo("current-clock-scroll-target", anchor: .top)

@@ -10,6 +10,113 @@ import XCTest
 /// the physical microphone/speaker is replaced by a deterministic audio device.
 @MainActor
 final class ManagedLiveIntegrationTests: XCTestCase {
+    func testExistingParentCanRefreshManagedAccessWithoutStartingVoice() async throws {
+        guard ProcessInfo.processInfo.environment["WATCHLEARN_RUN_SIGNED_IN_ACCOUNT_READ"] == "1" else {
+            throw XCTSkip("Explicitly enable the connected parent's read-only account check.")
+        }
+        let credential = try await ParentAccount.shared.voiceCredential()
+        guard case .managedLive = credential else { XCTFail("Expected existing Apple/Firebase managed access"); return }
+        await ParentAccount.shared.refresh()
+        XCTAssertNotNil(ParentAccount.shared.allowance)
+        XCTAssertEqual(ParentAccount.shared.allowance?.active, false)
+        print("PARENT_ACCESS authenticated=true consent_verified=true active_session=false no_voice_started=true")
+    }
+
+    func testSignedInHalfHoursStayDistinctAndContinueWithoutCheckingTalk() async throws {
+        guard ProcessInfo.processInfo.environment["WATCHLEARN_RUN_SIGNED_IN_HALF_HOURS"] == "1" else {
+            throw XCTSkip("Explicitly enable the paid synthetic half-hour conversation.")
+        }
+        for _ in 0..<100 where UIApplication.shared.applicationState != .active {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        guard UIApplication.shared.applicationState == .active else { throw XCTSkip("Test host must be foreground") }
+        let base: URL, token: String
+        let loopback = ProcessInfo.processInfo.environment["WATCHLEARN_TEST_MANAGED_BROKER"]
+        if let loopback, let url = URL(string: loopback), url.scheme == "http", url.host == "127.0.0.1" {
+            base = url
+            token = "fixture-synthetic-live-only"
+        } else {
+            let credential = try await ParentAccount.shared.voiceCredential()
+            guard case let .managedLive(url, credentialToken) = credential else { XCTFail("Expected managed account"); return }
+            base = url; token = credentialToken
+        }
+        let audio = SyntheticWebRTCAudioDevice()
+        let factory = RTCPeerConnectionFactory(encoderFactory: nil, decoderFactory: nil, audioDevice: audio)
+        let service = ManagedLiveSession(baseURL: base, token: token, factory: factory)
+        let language: RealtimeCoachLanguage = ProcessInfo.processInfo.environment["WATCHLEARN_HALF_HOUR_LANGUAGE"] == "en" ? .english : .german
+        var coach = "", childTranscript = "", speaking = false, localAnswers = 0, stage = "opening"
+        var grades: [(Int, ClockAnswerReport, Bool)] = [], advances: [Int] = []
+        service.diagnostics = {
+            if $0.hasPrefix("answer_path=local") { localAnswers += 1 }
+            print("HALF_DIAGNOSTIC \($0)")
+        }
+        let observer = Task { @MainActor in
+            for await event in service.events {
+                if case let .transcriptDelta(speaker, text) = event, speaker == .coach { coach += text }
+                if case let .transcriptDelta(speaker, text) = event, speaker == .child { childTranscript += text }
+                if case .assistantAudio = event { speaking = true }
+                if case .assistantAudioFinished = event { speaking = false }
+                if case let .liveClockAnswerReported(report, result, id) = event { grades.append((id, report, result.correct == true)) }
+                if case let .liveAdvanceRequested(id) = event { advances.append(id) }
+            }
+        }
+        defer {
+            let evidence = XCTAttachment(string: "Stage: \(stage)\nGrades: \(grades.count); advances: \(advances)\nSynthetic child: \(childTranscript)\nCoach: \(coach)")
+            evidence.name = "Synthetic half-hour conversation"; evidence.lifetime = .keepAlways; add(evidence)
+            observer.cancel(); audio.finish()
+        }
+        do {
+            try await service.open(language: language, safetyIdentifier: .init(stableID: "synthetic-half-hours"))
+            let scenarios: [(Int, Int, [(String, Int, Bool)])] = [
+                (1, 4, [("halb-fuenf", 4, true)]),
+                (2, 5, [("halb-fuenf", 4, false), ("halb-sechs", 5, true)]),
+                (3, 6, [("fuenf-dreissig", 5, false), ("sechs-dreissig", 6, true)])
+            ]
+            for (id, target, attempts) in scenarios {
+                let beforePrompt = coach.count
+                try await service.setChallenge(.init(questionID: id, hour: target, minute: 30, difficulty: "halfHour", language: language))
+                if id == 1 { try await service.startVoice(authorizedBy: service.authorizeCaptureStart()) }
+                stage = "clock \(id) prompt"
+                try await wait(20) { coach.count > beforePrompt && !speaking && audio.nonSilentOutputFrames > 4800 }
+                for (fixture, saidHour, correct) in attempts {
+                    let before = grades.count
+                    let directory = ProcessInfo.processInfo.environment["WATCHLEARN_HALF_HOUR_FIXTURES"].map { URL(fileURLWithPath: $0) } ?? FileManager.default.temporaryDirectory
+                    let speech = try Data(contentsOf: directory.appendingPathComponent("synthetic-\(fixture).pcm"))
+                    audio.say(speech)
+                    stage = "clock \(id) grade \(fixture)"
+                    try await wait(25) { grades.count > before }
+                    XCTAssertEqual(grades.last?.0, id)
+                    XCTAssertEqual(grades.last?.1, .init(hour: saidHour, minute: 30, unknown: false))
+                    XCTAssertEqual(grades.last?.2, correct)
+                    if correct { stage = "clock \(id) advance"; try await wait(15) { advances.contains(id) } }
+                    else {
+                        try await Task.sleep(for: .seconds(3))
+                        try await wait(12) { !speaking }
+                        XCTAssertFalse(advances.contains(id), "A wrong half-hour must stay on this clock")
+                    }
+                    print("HALF_HOUR language=\(language.rawValue) question=\(id) target=\(target):30 heard=\(saidHour):30 correct=\(correct)")
+                }
+            }
+            XCTAssertEqual(advances, [1, 2, 3])
+            XCTAssertEqual(localAnswers, 5, "These unambiguous attempts need no extraction model call")
+            let normalized = coach.lowercased()
+            for filler in ["check", "prüfe", "prüfen", "überprüf", "moment", "nachschauen", "warte kurz", "verify", "look up"] {
+                XCTAssertFalse(normalized.contains(filler), "Unexpected process narration: \(filler)")
+            }
+            let evidence = XCTAttachment(string: coach)
+            evidence.name = "Synthetic half-hour coach output"; evidence.lifetime = .keepAlways; add(evidence)
+            await service.disconnect()
+            if loopback == nil {
+                await ParentAccount.shared.refresh()
+                XCTAssertEqual(ParentAccount.shared.allowance?.active, false)
+            }
+        } catch {
+            await service.disconnect()
+            let failure = error as NSError
+            XCTFail("Half-hour conversation failed at \(stage): \(failure.domain) code=\(failure.code)")
+        }
+    }
+
     /// Real provider output with silent synthetic input: verifies the hero
     /// greets first in both languages without transmitting microphone audio.
     func testSignedInParentGreetsAndAdvancesInBothLanguages() async throws {

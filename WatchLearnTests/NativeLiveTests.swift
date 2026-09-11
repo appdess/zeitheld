@@ -5,6 +5,16 @@ import XCTest
 
 @MainActor
 final class NativeLiveTests: XCTestCase {
+    func testCurrentHalfHourContextIncludesUnambiguousLocalizedReadings() {
+        for (hour, german, english) in [(4, "Halb fünf", "half past four"),
+                                       (5, "Halb sechs", "half past five"),
+                                       (6, "Halb sieben", "half past six")] {
+            let context = ClockChallengeContext(questionID: hour, hour: hour, minute: 30, difficulty: "halfHour", language: .german)
+            let prompt = LiveClockCoachPrompt.challengeInstructions(context, firstInSession: false)
+            XCTAssertTrue(prompt.contains("Correct German: \(german); English: \(english)"))
+        }
+    }
+
     func testGreetingIsLocalizedAndFirstClockWithoutHistoryStillWaitsForAudio() throws {
         for language in [RealtimeCoachLanguage.german, .english] {
             let context = ClockChallengeContext(questionID: 1, hour: 3, minute: 0, difficulty: "fullHour", language: language)

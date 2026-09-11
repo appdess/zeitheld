@@ -213,7 +213,7 @@ final class WatchLearnUITests: XCTestCase {
         app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "answer-choice-")).firstMatch.tap()
         app.buttons["journey-tab"].tap()
         let reset = app.buttons["journey-reset"]
-        for _ in 0..<4 where !reset.isHittable { app.swipeUp() }
+        scrollTo(reset, in: app, fullyVisible: true)
         reset.tap()
         XCTAssertTrue(app.staticTexts["Lernreise von Mika zurücksetzen?"].waitForExistence(timeout: 3))
         app.buttons["Diese Lernreise löschen"].tap()
@@ -289,11 +289,11 @@ final class WatchLearnUITests: XCTestCase {
                     return
                 }
                 if !frame.isEmpty && frame.minY < bounds.lowerBound {
-                    app.swipeDown()
+                    app.swipeDown(velocity: .slow)
                     continue
                 }
             }
-            app.swipeUp()
+            app.swipeUp(velocity: .slow)
         }
         XCTFail("Control did not become visible: \(element.identifier)")
     }
@@ -433,17 +433,15 @@ final class WatchLearnUITests: XCTestCase {
         XCTAssertTrue(app.buttons["hero-description-microphone"].isHittable)
         XCTAssertTrue(app.buttons["hero-lab-parent-setup"].exists)
         let optional = app.buttons["hero-optional-choices"]
-        for _ in 0..<5 where !optional.isHittable { app.swipeUp() }
+        scrollTo(optional, in: app, fullyVisible: true)
         optional.tap()
+        XCTAssertEqual(optional.value as? String, "Expanded")
         let deepSkinTone = app.buttons["Deep skin tone"]
-        XCTAssertTrue(deepSkinTone.exists)
-        for _ in 0..<3 where !deepSkinTone.isHittable { app.swipeUp() }
+        scrollTo(deepSkinTone, in: app, fullyVisible: true)
         deepSkinTone.tap()
 
         let fireFlight = app.buttons["Fire flight"]
-        for _ in 0..<3 where !fireFlight.exists || !fireFlight.isHittable {
-            app.swipeUp()
-        }
+        scrollTo(fireFlight, in: app, fullyVisible: true)
         XCTAssertTrue(fireFlight.waitForExistence(timeout: 3))
         XCTAssertTrue(fireFlight.isHittable)
         fireFlight.tap()
@@ -644,7 +642,12 @@ final class WatchLearnUITests: XCTestCase {
             XCTAssertTrue(app.buttons["voice-stop-button"].isHittable)
             XCTAssertFalse(app.buttons["voice-coach-button"].exists,
                            "Next keeps the current conversation active")
-            XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "answer-choice-")).firstMatch.isEnabled)
+            let answersReady = NSPredicate { _, _ in
+                let answers = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "answer-choice-")).allElementsBoundByIndex
+                return answers.count == 3 && answers.allSatisfy(\.isEnabled)
+            }
+            expectation(for: answersReady, evaluatedWith: nil)
+            waitForExpectations(timeout: 4)
             app.terminate()
         }
     }

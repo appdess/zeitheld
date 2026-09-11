@@ -43,11 +43,24 @@ struct HeroLabView: View {
                     VStack(spacing: 20) {
                         descriptionCard
                         onlineStatusCard
-                        DisclosureGroup(copy(de: "Eigenschaften auswählen (optional)", en: "Choose extra details (optional)"), isExpanded: $showingChoices) {
-                            choices.padding(.top, 12)
+                        Button {
+                            withAnimation { showingChoices.toggle() }
+                        } label: {
+                            HStack {
+                                Text(copy(de: "Eigenschaften auswählen (optional)", en: "Choose extra details (optional)"))
+                                    .multilineTextAlignment(.leading)
+                                Spacer()
+                                Image(systemName: showingChoices ? "chevron.up" : "chevron.down")
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                         .font(.headline)
+                        .foregroundStyle(.indigo)
+                        .accessibilityValue(showingChoices ? copy(de: "Geöffnet", en: "Expanded") : copy(de: "Geschlossen", en: "Collapsed"))
                         .accessibilityIdentifier("hero-optional-choices")
+                        if showingChoices { choices }
                         if viewModel.latestImageData != nil {
                             heroPreview
                                 .id("hero-preview-scroll-target")

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftUI
 
 #if DEBUG
 /// An explicit, non-network fixture for exercising the complete Hero Lab UI
@@ -26,16 +27,51 @@ enum HeroGenerationUITestFixture {
     }
 }
 
-/// Delays long enough for the UI test to leave the Hero Lab while generation
-/// is observably in flight, then returns a tiny valid PNG without network I/O.
-struct DelayedHeroImageUITestGenerator: HeroImageGenerating {
+/// The test explicitly releases pending work after observing the real UI state.
+/// Wall-clock delays race with accessibility queries on slower hosted runners.
+@MainActor @Observable
+final class HeroUITestRequestGate {
+    static let shared = HeroUITestRequestGate()
+    enum Request: String, CaseIterable {
+        case image, description
+    }
+    private(set) var pending = Set<Request>()
+
+    func waitForRelease(_ request: Request) async throws {
+        pending.insert(request)
+        defer { pending.remove(request) }
+        while pending.contains(request) {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        try Task.checkCancellation()
+    }
+
+    func release(_ request: Request) { pending.remove(request) }
+}
+
+struct HeroUITestCompletionControls: View {
+    @Bindable private var gate = HeroUITestRequestGate.shared
+    var body: some View {
+        ForEach(HeroUITestRequestGate.Request.allCases, id: \.self) { request in
+            if gate.pending.contains(request) {
+                Button("Complete simulated \(request.rawValue) request") {
+                    gate.release(request)
+                }
+                .font(.caption)
+                .accessibilityIdentifier("ui-test-fixture-complete-\(request.rawValue)")
+            }
+        }
+    }
+}
+
+/// Returns a tiny valid PNG without network I/O after the test releases it.
+struct ControlledHeroImageUITestGenerator: HeroImageGenerating {
     func generate(
         design _: HeroDesign,
         description _: String,
         apiKey _: String
     ) async throws -> GeneratedHeroImage {
-        try await Task.sleep(for: .seconds(4))
-        try Task.checkCancellation()
+        try await HeroUITestRequestGate.shared.waitForRelease(.image)
 
         let encodedPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2uAAAAABJRU5ErkJggg=="
         guard let imageData = Data(base64Encoded: encodedPNG) else {
@@ -72,7 +108,7 @@ final class HeroVoiceInputUITestRecorder: HeroDescriptionRecording {
 }
 struct HeroVoiceInputUITestTranscriber: HeroDescriptionTranscribing {
     func transcribe(fileURL: URL, language: LearningLanguage, apiKey: String) async throws -> String {
-        try await Task.sleep(for: .seconds(7))
+        try await HeroUITestRequestGate.shared.waitForRelease(.description)
         return language == .german ? "Ein freundlicher Held mit blauem Umhang." : "A friendly hero with a blue cape."
     }
 }

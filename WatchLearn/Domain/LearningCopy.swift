@@ -39,9 +39,9 @@ public enum LearningCopy: Sendable {
         case (.voiceOfflineTitle, .german): "Tippen geht immer"
         case (.voiceOfflineTitle, .english): "Tapping always works"
         case (.voiceOfflineMessage, .german):
-            "Der Sprachcoach ist gerade nicht verfügbar. Du kannst trotzdem jede Aufgabe lösen."
+            "Dein Zeitheld ist gerade nicht erreichbar. Du kannst trotzdem jede Aufgabe lösen."
         case (.voiceOfflineMessage, .english):
-            "The voice coach is unavailable right now. You can still solve every question."
+            "Your Time Hero is unavailable right now. You can still solve every question."
         case (.nextQuestion, .german): "Nächste Aufgabe"
         case (.nextQuestion, .english): "Next question"
         case (.tryAgain, .german): "Fast! Versuch es noch einmal."

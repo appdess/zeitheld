@@ -14,9 +14,14 @@ struct ParentSettingsView: View {
     @State private var showingPrivateKey = false
     @State private var showingDeleteHeroConfirmation = false
     @State private var errorMessage: String?
-    @State private var showingAgreement = false
+    @State private var activeSheet: ParentSheet?
     @State private var withdrawingAgreement = false
     @State private var withdrawalMessage: String?
+
+    private enum ParentSheet: String, Identifiable {
+        case agreement, accountDeletion
+        var id: String { rawValue }
+    }
 
     var body: some View {
         NavigationStack {
@@ -35,7 +40,9 @@ struct ParentSettingsView: View {
                         }
                     }
                 }
-                ParentAccountSection(preferences: preferences)
+                ParentAccountSection(preferences: preferences,
+                    onReviewAgreement: { activeSheet = .agreement },
+                    onDeleteAccount: { activeSheet = .accountDeletion })
                 Section(copy(de: "Sprache", en: "Language")) {
                     Toggle(copy(de: "Gerätesprache verwenden", en: "Use device language"), isOn: $preferences.followsDeviceLanguage)
                         .accessibilityIdentifier("device-language-toggle")
@@ -62,7 +69,7 @@ struct ParentSettingsView: View {
                     .accessibilityLabel(copy(de: "Helden gestalten", en: "Create heroes"))
                     .accessibilityValue(preferences.hasHeroGenerationConsent ? copy(de: "Erlaubt", en: "Allowed") : copy(de: "Aus", en: "Off"))
                     .accessibilityIdentifier("hero-online-toggle")
-                    Button(copy(de: "Datenschutz und Berechtigungen", en: "Privacy and permissions")) { showingAgreement = true }
+                    Button(copy(de: "Datenschutz und Berechtigungen", en: "Privacy and permissions")) { activeSheet = .agreement }
                         .accessibilityIdentifier("privacy-permissions-button")
                     if let receipt = preferences.agreementAcceptance {
                         Text(copy(de: "Bestätigte Version: ", en: "Confirmed version: ") + receipt.document.version)
@@ -290,7 +297,6 @@ struct ParentSettingsView: View {
                 guard connectionCheckRequest != nil else { return }
                 await preferences.checkVoiceConnection()
             }
-            .sheet(isPresented: $showingAgreement) { ParentAgreementView(preferences: preferences) }
             .onDisappear {
                 apiKeyDraft = ""
                 preferences.invalidateConnectionCheck()
@@ -326,6 +332,13 @@ struct ParentSettingsView: View {
                 Button("OK", role: .cancel) { errorMessage = nil }
             } message: {
                 Text(errorMessage ?? "")
+            }
+        }
+        // Keep presentation ownership outside Form's lazily recycled sections.
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .agreement: ParentAgreementView(preferences: preferences)
+            case .accountDeletion: ParentAccountDeletionView(preferences: preferences)
             }
         }
     }
@@ -509,8 +522,8 @@ struct SupervisedUseTermsView: View {
                 de: "Diese Hinweise schließen keine zwingende Haftung aus, insbesondere nicht für Vorsatz, grobe Fahrlässigkeit oder Schäden an Leben, Körper oder Gesundheit. Datenschutzrechte werden nicht eingeschränkt.",
                 en: "These terms do not exclude mandatory liability, including liability for intent, gross negligence or injury to life, body or health. They do not limit privacy rights.")
             termsRow(icon: "waveform.and.mic",
-                de: "Bei aktivem Online-Coach werden Audio und Gesprächsinhalte von OpenAI verarbeitet. Heldenideen und Bilder werden für Transkription, Moderation oder Bilderstellung verarbeitet. Keine echten Namen, Adressen, Schulen oder anderen privaten Informationen eingeben. Die Datenschutzhinweise erklären die Verarbeitung genauer.",
-                en: "When the online coach is active, OpenAI processes audio and conversation content. Hero ideas and images are processed for transcription, moderation or image generation. Do not enter real names, addresses, schools or other private information. The privacy notice explains the processing in more detail.")
+                de: "Beim Gespräch mit deinem Zeithelden werden Audio und Gesprächsinhalte von OpenAI verarbeitet. Heldenideen und Bilder werden für Transkription, Moderation oder Bilderstellung verarbeitet. Keine echten Namen, Adressen, Schulen oder anderen privaten Informationen eingeben. Die Datenschutzhinweise erklären die Verarbeitung genauer.",
+                en: "During a conversation with your Time Hero, OpenAI processes audio and conversation content. Hero ideas and images are processed for transcription, moderation or image generation. Do not enter real names, addresses, schools or other private information. The privacy notice explains the processing in more detail.")
             termsRow(icon: "creditcard",
                 de: "Das Elternkonto bietet einmalig zehn Testminuten, gemeinsam für alle Geräte und Kinderprofile. Es gibt keine automatische Zahlung. Weitere Nutzungslimits können gelten. Bei einem eigenen API-Key im privaten Entwickler-Modus rechnet der Anbieter mögliche Kosten separat ab.",
                 en: "A parent account receives one ten-minute trial shared across devices and child profiles. There are no automatic charges. Additional usage limits may apply. A personal API key in private developer mode may incur separate provider charges.")

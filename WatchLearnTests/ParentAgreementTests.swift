@@ -1,8 +1,38 @@
 import XCTest
+import CryptoKit
 @testable import WatchLearn
 
 @MainActor
 final class ParentAgreementTests: XCTestCase {
+    func testAppleNonceSurvivesFirebaseFormEncodingForEveryByteValue() throws {
+        for byte in UInt8.min...UInt8.max {
+            let nonce = AppleSignInNonce(randomBytes: Array(repeating: byte, count: 32))
+            XCTAssertEqual(nonce.rawValue.count, 64)
+            XCTAssertTrue(nonce.rawValue.allSatisfy { "0123456789abcdef".contains($0) })
+            let received = try firebaseFormRoundTrip(nonce.rawValue)
+            XCTAssertEqual(received, nonce.rawValue)
+            let receivedHash = SHA256.hash(data: Data(received.utf8))
+                .map { String(format: "%02x", $0) }.joined()
+            XCTAssertEqual(receivedHash, nonce.sha256)
+        }
+    }
+
+    func testOldBase64NonceReproducesTheIntermittentMismatch() throws {
+        let legacy = Data(repeating: 251, count: 32).base64EncodedString()
+        XCTAssertTrue(legacy.contains("+"))
+        XCTAssertNotEqual(try firebaseFormRoundTrip(legacy), legacy)
+    }
+
+    private func firebaseFormRoundTrip(_ nonce: String) throws -> String {
+        // Same URLComponents.query serialization as the pinned Firebase SDK's
+        // VerifyAssertionRequest, followed by standard form decoding.
+        var components = URLComponents()
+        components.queryItems = [URLQueryItem(name: "nonce", value: nonce)]
+        let body = try XCTUnwrap(components.query)
+        let value = String(body.dropFirst("nonce=".count))
+        return try XCTUnwrap(value.replacingOccurrences(of: "+", with: " ").removingPercentEncoding)
+    }
+
     func testSignInDiagnosticsNeverContainProviderDetails() {
         let error = NSError(domain: NSURLErrorDomain, code: -1009,
                             userInfo: [NSLocalizedDescriptionKey: "private-token-and-account-details"])

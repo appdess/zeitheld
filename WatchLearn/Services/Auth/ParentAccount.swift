@@ -11,6 +11,20 @@ enum ParentSignInStage: String {
     case apple = "APPLE", firebase = "FIREBASE", consent = "CONSENT"
 }
 
+struct AppleSignInNonce {
+    let rawValue: String
+    var sha256: String {
+        SHA256.hash(data: Data(rawValue.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    init(randomBytes: [UInt8]) {
+        // Firebase serializes the raw nonce in a form-style postBody. Base64
+        // can contain '+', which a form decoder turns into a space. Hex keeps
+        // all 256 random bits without characters that can change in transit.
+        rawValue = randomBytes.map { String(format: "%02x", $0) }.joined()
+    }
+}
+
 /// Retain only an allow-listed source and numeric code, never provider text,
 /// identity tokens or NSError.userInfo from an authentication failure.
 struct ParentSignInFailure {
@@ -111,10 +125,10 @@ final class ParentAccount {
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
             nonce = nil; message = "Anmeldung nicht verfügbar / Sign-in unavailable"; return false
         }
-        let raw = Data(bytes).base64EncodedString()
-        nonce = raw
+        let value = AppleSignInNonce(randomBytes: bytes)
+        nonce = value.rawValue
         request.requestedScopes = [.email]
-        request.nonce = SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
+        request.nonce = value.sha256
         busy = true
         return true
     }

@@ -14,9 +14,14 @@ struct ParentSettingsView: View {
     @State private var showingPrivateKey = false
     @State private var showingDeleteHeroConfirmation = false
     @State private var errorMessage: String?
-    @State private var showingAgreement = false
+    @State private var activeSheet: ParentSheet?
     @State private var withdrawingAgreement = false
     @State private var withdrawalMessage: String?
+
+    private enum ParentSheet: String, Identifiable {
+        case agreement, accountDeletion
+        var id: String { rawValue }
+    }
 
     var body: some View {
         NavigationStack {
@@ -35,7 +40,9 @@ struct ParentSettingsView: View {
                         }
                     }
                 }
-                ParentAccountSection(preferences: preferences)
+                ParentAccountSection(preferences: preferences,
+                    onReviewAgreement: { activeSheet = .agreement },
+                    onDeleteAccount: { activeSheet = .accountDeletion })
                 Section(copy(de: "Sprache", en: "Language")) {
                     Toggle(copy(de: "Gerätesprache verwenden", en: "Use device language"), isOn: $preferences.followsDeviceLanguage)
                         .accessibilityIdentifier("device-language-toggle")
@@ -62,7 +69,7 @@ struct ParentSettingsView: View {
                     .accessibilityLabel(copy(de: "Helden gestalten", en: "Create heroes"))
                     .accessibilityValue(preferences.hasHeroGenerationConsent ? copy(de: "Erlaubt", en: "Allowed") : copy(de: "Aus", en: "Off"))
                     .accessibilityIdentifier("hero-online-toggle")
-                    Button(copy(de: "Datenschutz und Berechtigungen", en: "Privacy and permissions")) { showingAgreement = true }
+                    Button(copy(de: "Datenschutz und Berechtigungen", en: "Privacy and permissions")) { activeSheet = .agreement }
                         .accessibilityIdentifier("privacy-permissions-button")
                     if let receipt = preferences.agreementAcceptance {
                         Text(copy(de: "Bestätigte Version: ", en: "Confirmed version: ") + receipt.document.version)
@@ -290,7 +297,6 @@ struct ParentSettingsView: View {
                 guard connectionCheckRequest != nil else { return }
                 await preferences.checkVoiceConnection()
             }
-            .sheet(isPresented: $showingAgreement) { ParentAgreementView(preferences: preferences) }
             .onDisappear {
                 apiKeyDraft = ""
                 preferences.invalidateConnectionCheck()
@@ -326,6 +332,13 @@ struct ParentSettingsView: View {
                 Button("OK", role: .cancel) { errorMessage = nil }
             } message: {
                 Text(errorMessage ?? "")
+            }
+        }
+        // Keep presentation ownership outside Form's lazily recycled sections.
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .agreement: ParentAgreementView(preferences: preferences)
+            case .accountDeletion: ParentAccountDeletionView(preferences: preferences)
             }
         }
     }

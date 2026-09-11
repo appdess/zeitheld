@@ -79,21 +79,35 @@ jobs:
             -parallel-testing-enabled NO \
             -enableCodeCoverage YES
 
+      - name: Verify Release privacy navigation and Keychain
+        run: |
+          xcodebuild test \
+            -project WatchLearn.xcodeproj \
+            -scheme WatchLearn \
+            -configuration Release \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' \
+            -resultBundlePath TestResults/ReleasePrivacy.xcresult \
+            -parallel-testing-enabled NO \
+            ENABLE_TESTABILITY=YES \
+            -only-testing:WatchLearnUITests/WatchLearnUITests/testPrivacyReviewReturnsToSettingsWithoutAccepting \
+            -only-testing:WatchLearnTests/KeychainPreferencesTests/testRealKeychainSurvivesStoreRecreationAndDeletesOnlyItsOwnItem
+
       - name: Upload failed test result
         if: failure()
         run: |
-          if [[ -d TestResults/WatchLearn.xcresult ]]; then
-            xcrun xcresulttool get test-results summary \
-              --path TestResults/WatchLearn.xcresult \
-              > TestResults/summary.json
-          fi
+          for result in TestResults/*.xcresult; do
+            if [[ -d "$result" ]]; then
+              xcrun xcresulttool get test-results summary \
+                --path "$result" > "${result%.xcresult}-summary.json"
+            fi
+          done
 
       - name: Upload sanitized failed-test summary
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: failed-xcode-tests-${{ github.run_attempt }}
-          path: TestResults/summary.json
+          path: TestResults/*-summary.json
           if-no-files-found: ignore
           retention-days: 14
 

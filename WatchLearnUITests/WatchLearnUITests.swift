@@ -6,6 +6,25 @@ final class WatchLearnUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testPrivacyReviewReturnsToSettingsWithoutAccepting() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--english"]
+        app.launch()
+        app.buttons["parent-settings-button"].tap()
+        let review = app.buttons["parent-review-agreement"]
+        XCTAssertTrue(review.waitForExistence(timeout: 5))
+        review.tap()
+        let back = app.buttons["agreement-back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        let confirmation = app.buttons["agreement-confirm"]
+        scrollTo(confirmation, in: app)
+        XCTAssertTrue(confirmation.isHittable)
+        back.tap()
+        XCTAssertTrue(app.buttons["settings-done-button"].waitForExistence(timeout: 5))
+        app.buttons["settings-done-button"].tap()
+        XCTAssertTrue(app.buttons["voice-coach-button"].waitForExistence(timeout: 5))
+    }
+
     private func revealPrivateKey(_ app: XCUIApplication) {
         let disclosure = app.buttons["private-key-disclosure"]
         for _ in 0..<8 where !disclosure.isHittable { app.swipeUp() }

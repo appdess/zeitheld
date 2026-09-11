@@ -46,6 +46,12 @@ and state transitions, while that separate check verifies actual transactions.
 
 ## Release checks
 
+CI also runs the privacy-review scrolling/back path and real system Keychain
+persistence against the Release configuration with `ENABLE_TESTABILITY=YES`.
+The navigation check does not accept an agreement. This caught a modal
+presentation regression that the earlier Debug-only signup coverage missed.
+Distribution builds are built separately without enabling testability.
+
 ```bash
 ./Scripts/security-check.sh
 ./Scripts/test-release-guards.sh

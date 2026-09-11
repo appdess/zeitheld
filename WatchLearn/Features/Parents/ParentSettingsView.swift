@@ -127,7 +127,9 @@ struct ParentSettingsView: View {
 
                     switch preferences.connectionCheck {
                     case .connected:
-                        Label(copy(de: "Verbindung bereit. Audio beim Gesprächsstart prüfen.", en: "Connection ready. Check audio when starting the conversation."),
+                        Label(preferences.cloudVoiceMode == .managedAccount
+                              ? copy(de: "Kontozugang geprüft. Live-Verbindung und Audio werden beim Start geprüft.", en: "Account access checked. Live connection and audio are checked when you start.")
+                              : copy(de: "Live-Verbindung geprüft. Audio beim Gesprächsstart prüfen.", en: "Live connection checked. Check audio when starting the conversation."),
                               systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                             .accessibilityIdentifier("live-connection-success")
@@ -146,6 +148,33 @@ struct ParentSettingsView: View {
                 } footer: {
                     Text(copy(de: "Dieser Test prüft den Zugang, ohne das Mikrofon einzuschalten. Mit Elternkonto verbraucht er keine Testminuten. Danach: Fertig → Sprich mit deinem Zeithelden. Das Mikrofon beim ersten Start erlauben. Mit dem roten Stopp-Knopf beendest du das Gespräch.",
                               en: "This checks access without turning on the microphone. With a parent account it does not use trial minutes. Then: Done → Talk to your Time Hero. Allow microphone access the first time. The red stop button ends the conversation."))
+                }
+
+                Section {
+                    if preferences.connectionHistory.entries.isEmpty {
+                        Text(copy(de: "Noch keine Verbindungsberichte.", en: "No connection reports yet."))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ShareLink(item: preferences.connectionHistory.report) {
+                            Label(copy(de: "Verbindungsbericht teilen", en: "Share connection report"), systemImage: "square.and.arrow.up")
+                        }
+                        .accessibilityIdentifier("share-connection-report")
+                        DisclosureGroup(copy(de: "Letzte Versuche", en: "Recent attempts")) {
+                            ForEach(preferences.connectionHistory.entries) { entry in
+                                Text(entry.supportLine)
+                                    .font(.caption.monospaced())
+                                    .textSelection(.enabled)
+                            }
+                        }
+                        Button(copy(de: "Berichte löschen", en: "Clear reports"), role: .destructive) {
+                            preferences.connectionHistory.clear()
+                        }
+                        .accessibilityIdentifier("clear-connection-reports")
+                    }
+                } header: {
+                    Text(copy(de: "Verbindungsberichte", en: "Connection reports"))
+                } footer: {
+                    Text(copy(de: "Die letzten 40 Einträge bleiben bis zu 7 Tage auf diesem Gerät, auch nach einem Neustart. Gespeichert werden Zeitpunkt, App-Version, Verbindungsart und Fehlercodes. Keine Stimmen, Gesprächsinhalte oder Zugangsdaten. Teilen erfolgt nur durch dich.", en: "The latest 40 entries stay on this device for up to 7 days, including after a restart. They contain time, app version, connection type and error codes. No voices, conversation content or credentials. You choose whether to share them."))
                 }
 
                 if preferences.cloudVoiceMode == .managedBroker {

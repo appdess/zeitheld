@@ -21,6 +21,7 @@
 		4007066F0CD07E93C6A75B59 /* HeroLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9E398C398CC23EF3B44FB6A /* HeroLifecycleTests.swift */; };
 		41F0C293F00D63E3D795165F /* AnalogClockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F25414C07D109CACC82E73D5 /* AnalogClockView.swift */; };
 		456862CD66C882FF95A63C20 /* LiveOpenAINativeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A02E6F595B29C51F6D74E739 /* LiveOpenAINativeTests.swift */; };
+		46C421EE2B6938478F1EA2C7 /* LiveConnectionHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69AC8D339A47F0E344AF65C6 /* LiveConnectionHistory.swift */; };
 		4856BB1140FD351A07140C67 /* HeroCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = C41065876B23CECEFE9179A8 /* HeroCredential.swift */; };
 		48DE6BEE1E5AEAADEC98BD98 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 42B40EBC6668621AA5A542AB /* FirebaseAuth */; };
 		4F8B69AA7C99D372A89A304B /* RealtimeCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52571FBCD184645BE8DE968D /* RealtimeCodecTests.swift */; };
@@ -29,6 +30,7 @@
 		5586B4B7EB9A77D2D67F61CB /* HeroPromptPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 287C724F2A3E446C612AB49A /* HeroPromptPolicyTests.swift */; };
 		5698F2CB912D4A51AECE1CCE /* HeroPromptPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64EDC6E58BE2AC06459E06E7 /* HeroPromptPolicy.swift */; };
 		58E7E6E923819140BE136C39 /* WatchLearnUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBEC3A820B480D8BC5E77EBD /* WatchLearnUITests.swift */; };
+		5D07A4099512B0C6678CD3FB /* LiveConnectionRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E87F6BC87175E9D2B0DE4A2 /* LiveConnectionRecoveryTests.swift */; };
 		5EA65952811F0D57F34F9D00 /* ParentAgreementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F0E8F83AAA601CD37937487 /* ParentAgreementView.swift */; };
 		5EB12BB712DF593E3B6CBB32 /* RealtimeServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88C31ABBF93E136A2B272E04 /* RealtimeServiceTests.swift */; };
 		604C13730E6B361ADB589FE8 /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = 0D486A9D6582CCBC3CEED4C0 /* FirebaseAppCheck */; };
@@ -62,6 +64,7 @@
 		B5E292215A181A7F5659F585 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 07F947EC04DF9EF992902D91 /* InfoPlist.strings */; };
 		B620029B7B3FD7BE333777C4 /* HeroGenerationPersistenceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABE4B3ACC7552ADA9E16D386 /* HeroGenerationPersistenceUITests.swift */; };
 		B81E938204E55FDDEA112E5D /* LearningCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C789A52E6797F430D1AEE87 /* LearningCopy.swift */; };
+		BA0E5AC9DB4BABCC5085847C /* PendingLiveSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E55743FE0C34A808037C4816 /* PendingLiveSessionStore.swift */; };
 		BC4701A108F9591C11F65DB5 /* KeychainSecureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 938EB499FE270CFD2B38AA18 /* KeychainSecureStore.swift */; };
 		BEC910B1AD5FB3984E49E663 /* LearningLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 916E69658642410ABF3289C8 /* LearningLanguage.swift */; };
 		BF5CF37AA56D038808A0D32E /* MicrophonePermissionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD7A72DFEE3B987E1E3B43E5 /* MicrophonePermissionService.swift */; };
@@ -140,6 +143,7 @@
 		64EDC6E58BE2AC06459E06E7 /* HeroPromptPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroPromptPolicy.swift; sourceTree = "<group>"; };
 		65B1CBF4B1BBD600B81D9628 /* SecureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureStore.swift; sourceTree = "<group>"; };
 		67D2BC2DB9418E4521EAED80 /* WatchLearnApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLearnApp.swift; sourceTree = "<group>"; };
+		69AC8D339A47F0E344AF65C6 /* LiveConnectionHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveConnectionHistory.swift; sourceTree = "<group>"; };
 		6BE0FC9389036E0B23A1DB1A /* OpenAIRealtimeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIRealtimeService.swift; sourceTree = "<group>"; };
 		6BE61E75A024E08838376AFC /* WatchLearnTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WatchLearnTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6EDD044804331016702141FB /* HeroRecorderIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroRecorderIntegrationTests.swift; sourceTree = "<group>"; };
@@ -158,6 +162,7 @@
 		8C789A52E6797F430D1AEE87 /* LearningCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningCopy.swift; sourceTree = "<group>"; };
 		8CE1996DF5FF5B323264C4CF /* HeroOpenAIServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroOpenAIServiceTests.swift; sourceTree = "<group>"; };
 		8E41BD9E70F04DAE7BC0CA81 /* HeroTemporaryAudioCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroTemporaryAudioCleanupTests.swift; sourceTree = "<group>"; };
+		8E87F6BC87175E9D2B0DE4A2 /* LiveConnectionRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveConnectionRecoveryTests.swift; sourceTree = "<group>"; };
 		8EFAE3A448846AB618E70A03 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		916E69658642410ABF3289C8 /* LearningLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningLanguage.swift; sourceTree = "<group>"; };
 		938EB499FE270CFD2B38AA18 /* KeychainSecureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainSecureStore.swift; sourceTree = "<group>"; };
@@ -186,6 +191,7 @@
 		DF9F0F59391EE7181A7EFFDF /* ManagedLiveIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedLiveIntegrationTests.swift; sourceTree = "<group>"; };
 		E28D009483983E07C39A89C7 /* NativeLiveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeLiveTests.swift; sourceTree = "<group>"; };
 		E35521A97BF469C6BFBFA868 /* RealtimeAudioEngineIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeAudioEngineIntegrationTests.swift; sourceTree = "<group>"; };
+		E55743FE0C34A808037C4816 /* PendingLiveSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingLiveSessionStore.swift; sourceTree = "<group>"; };
 		E9E398C398CC23EF3B44FB6A /* HeroLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroLifecycleTests.swift; sourceTree = "<group>"; };
 		EC6D1869C0CE8F0EE33357DD /* HeroImageStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroImageStoreTests.swift; sourceTree = "<group>"; };
 		F1245753068DABAC32064BD9 /* LearningModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningModels.swift; sourceTree = "<group>"; };
@@ -212,9 +218,11 @@
 		0C8EEE34F02D0FAB6CF4B65B /* Live */ = {
 			isa = PBXGroup;
 			children = (
+				69AC8D339A47F0E344AF65C6 /* LiveConnectionHistory.swift */,
 				C6D886FDD317A644BA76CA53 /* LiveEventCodec.swift */,
 				46F350D3FA455AEA7E6BC5F4 /* ManagedLiveSession.swift */,
 				59BC65C2848467C395FF3AD3 /* OpenAILiveService.swift */,
+				E55743FE0C34A808037C4816 /* PendingLiveSessionStore.swift */,
 			);
 			path = Live;
 			sourceTree = "<group>";
@@ -437,6 +445,7 @@
 				6EDD044804331016702141FB /* HeroRecorderIntegrationTests.swift */,
 				8E41BD9E70F04DAE7BC0CA81 /* HeroTemporaryAudioCleanupTests.swift */,
 				A29B640DC3441BD15F57AB3F /* KeychainPreferencesTests.swift */,
+				8E87F6BC87175E9D2B0DE4A2 /* LiveConnectionRecoveryTests.swift */,
 				4DF7E8E1638D863415543069 /* LiveOpenAIHeroTests.swift */,
 				A02E6F595B29C51F6D74E739 /* LiveOpenAINativeTests.swift */,
 				AEA7EBF6C3F37C41C50837C6 /* LiveOpenAIRealtimeTests.swift */,
@@ -623,6 +632,7 @@
 				1F2C5169F6C332B2D35A6B64 /* HeroRecorderIntegrationTests.swift in Sources */,
 				79889F99BA24BCCC5B84A599 /* HeroTemporaryAudioCleanupTests.swift in Sources */,
 				E44740695ED552D7A7B9739E /* KeychainPreferencesTests.swift in Sources */,
+				5D07A4099512B0C6678CD3FB /* LiveConnectionRecoveryTests.swift in Sources */,
 				24289ED5455CF4FA490CB5FD /* LiveOpenAIHeroTests.swift in Sources */,
 				456862CD66C882FF95A63C20 /* LiveOpenAINativeTests.swift in Sources */,
 				206577D44DFA41F1893634DA /* LiveOpenAIRealtimeTests.swift in Sources */,
@@ -666,6 +676,7 @@
 				75DB008A7B35665A2844B33A /* LearningView.swift in Sources */,
 				7100847FEDF8040FD2B12ADC /* LearningViewModel.swift in Sources */,
 				A804BD9F036BB87686682305 /* LiveAnalogClockView.swift in Sources */,
+				46C421EE2B6938478F1EA2C7 /* LiveConnectionHistory.swift in Sources */,
 				1F802ED32389DB0EE5175A84 /* LiveEventCodec.swift in Sources */,
 				8D1E7F4BC0B956021A514119 /* ManagedLiveSession.swift in Sources */,
 				BF5CF37AA56D038808A0D32E /* MicrophonePermissionService.swift in Sources */,
@@ -679,6 +690,7 @@
 				5EA65952811F0D57F34F9D00 /* ParentAgreementView.swift in Sources */,
 				82FCA341118E8527B875C372 /* ParentPreferences.swift in Sources */,
 				90570C3AB6A4FDA2FB20D841 /* ParentSettingsView.swift in Sources */,
+				BA0E5AC9DB4BABCC5085847C /* PendingLiveSessionStore.swift in Sources */,
 				F7278510BEF64E65ABBF5111 /* ProjectLinks.swift in Sources */,
 				B20EE754A955AA56E67173D6 /* RealtimeAudioEngine.swift in Sources */,
 				9CE6BFB4487F5B9B5E8FA3B0 /* RealtimeEventCodec.swift in Sources */,
@@ -731,7 +743,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = WatchLearn/Resources/WatchLearn.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = WatchLearn/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -790,7 +802,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = WatchLearn/Resources/WatchLearn.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = WatchLearn/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

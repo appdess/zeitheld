@@ -47,6 +47,7 @@ final class ParentPreferences {
     }
 
     private let secureStore: any SecureStore
+    let connectionHistory: LiveConnectionHistory
     private let defaults: UserDefaults
     private let connectionChecker: any LiveConnectionChecking
     private var connectionRevision = 0
@@ -107,6 +108,7 @@ final class ParentPreferences {
     ) {
         self.secureStore = secureStore
         self.defaults = defaults
+        self.connectionHistory = LiveConnectionHistory(defaults: defaults)
         self.connectionChecker = connectionChecker
         // Existing explicit choices remain valid; new installations follow iOS.
         let followsDevice = defaults.object(forKey: Keys.followsDeviceLanguage) as? Bool
@@ -201,6 +203,7 @@ final class ParentPreferences {
         guard canCheckVoiceConnection, connectionCheck != .checking else { return }
         let revision = connectionRevision
         connectionCheck = .checking
+        connectionHistory.record(.started, operation: .accessCheck, mode: cloudVoiceMode)
         do {
             let credential: VoiceCoachCredential
             if cloudVoiceMode == .managedAccount {
@@ -220,9 +223,11 @@ final class ParentPreferences {
             )
             guard revision == connectionRevision else { return }
             connectionCheck = Task.isCancelled ? .idle : .connected
+            connectionHistory.record(Task.isCancelled ? .cancelled : .connected, operation: .accessCheck, mode: cloudVoiceMode)
         } catch {
             guard revision == connectionRevision else { return }
             connectionCheck = Task.isCancelled ? .idle : .failed(VoiceCoachFailure(error: error))
+            connectionHistory.record(Task.isCancelled ? .cancelled : .failed, operation: .accessCheck, mode: cloudVoiceMode, error: Task.isCancelled ? nil : error)
         }
     }
 

@@ -22,6 +22,11 @@ struct WatchLearnApp: App {
         let usesHeroGenerationUITestFixture = isUITesting
             && arguments.contains(HeroGenerationUITestFixture.launchArgument)
         preferences.resetForUITesting()
+        if isUITesting, arguments.contains("--ui-testing-connection-report") {
+            preferences.connectionHistory.clear()
+            preferences.connectionHistory.record(.failed, mode: .managedAccount, stage: .connection,
+                error: LiveConnectionSetupError(stage: .sessionStarted, underlying: URLError(.timedOut)))
+        }
         let progressStore = !isUITesting || persistsProgressDuringUITest
             ? LearningProgressStore()
             : nil

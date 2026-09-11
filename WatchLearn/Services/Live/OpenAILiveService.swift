@@ -368,6 +368,10 @@ actor OpenAILiveService: VoiceCoachingService {
             let code = switch mapped {
             case LiveServiceError.accessDenied: "live_access_denied"
             case LiveServiceError.handshakeTimeout: "network_timeout"
+            case let urlError as URLError:
+                VoiceCoachFailure(error: urlError).code == .networkTimeout ? "network_timeout"
+                    : VoiceCoachFailure(error: urlError).code == .networkOffline ? "network_offline" : "live_session_failed"
+            case RealtimeWebSocketTransportError.disconnected: "connection_lost"
             case is RealtimeAudioEngineError: "audio_engine_start_failed"
             default: (mapped as? RealtimeAPIError)?.code ?? "live_session_failed"
             }

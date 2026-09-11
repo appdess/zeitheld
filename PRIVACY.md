@@ -95,6 +95,16 @@ records after 30 days; expiry deletion is asynchronous. Trial ledgers and daily
 aggregate counters have separate retention as described above. Cloud platform
 request/security logs can contain network and operational metadata.
 
+The app keeps up to 40 connection-diagnostic entries from the last seven days
+on the device. These contain timestamps, app build number, connection mode,
+attempt count, setup stage and fixed error codes, never credentials, audio,
+SDP, exercise content or transcripts. Settings lets you view, share or clear
+them; there is no automatic report upload. Older entries are removed when the
+history is loaded or updated. Separately, opaque handles for this device's
+unfinished managed sessions are saved with a hashed account/backend scope.
+They allow the next attempt to confirm closure after a restart and are removed
+once the server confirms closure. These handles are not included in reports.
+
 ## Optional Hero Lab
 
 Appearance buttons work offline. Creating a picture sends selected fictional

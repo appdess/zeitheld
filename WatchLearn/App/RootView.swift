@@ -66,7 +66,6 @@ struct RootView: View {
     private var lifecycleAwareTabs: some View {
         permissionAwareTabs
         .onChange(of: learningViewModel.question.id) { _, _ in
-            guard voiceCoach.isSessionActive else { return }
             Task { await voiceCoach.updateChallenge(learningViewModel.question) }
         }
         .onChange(of: voiceCoach.phase) { _, phase in
@@ -76,7 +75,10 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { preferences.refreshDeviceLanguage() }
-            if phase != .active {
+            // The system microphone prompt temporarily makes the app inactive.
+            // No capture exists yet; let that permission request finish. Actual
+            // backgrounding and every active-audio interruption still stop it.
+            if phase == .background || (phase == .inactive && voiceCoach.phase != .requestingPermission) {
                 voiceCoach.stopLocalAudioImmediately()
                 Task { await voiceCoach.stop() }
             }

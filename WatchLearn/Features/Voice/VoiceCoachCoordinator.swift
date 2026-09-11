@@ -23,7 +23,7 @@ enum VoiceCoachPhase: Equatable, Sendable {
     }
 }
 
-enum VoiceCoachStartupStage: String, Equatable, Sendable {
+enum VoiceCoachStartupStage: String, Codable, Equatable, Sendable {
     case preparing = "VC-STAGE-PREPARE"
     case microphonePermission = "VC-STAGE-PERMISSION"
     case credentials = "VC-STAGE-CREDENTIALS"
@@ -81,7 +81,13 @@ enum VoiceCoachTranscriptPolicy {
     }
 }
 
-enum VoiceCoachFailureCode: String, Equatable, Sendable {
+enum VoiceCoachFailureCode: String, Codable, Equatable, Sendable {
+    case connectionLost = "VC-CONNECTION-LOST"
+    case serviceUnavailable = "VC-SERVICE-TEMPORARY"
+    case serviceLimit = "VC-SERVICE-LIMIT"
+    case cleanupPending = "VC-CLEANUP-PENDING"
+    case microphonePermission = "VC-MIC-PERMISSION"
+    case audioInterrupted = "VC-AUDIO-INTERRUPTED"
     case liveAccessDenied = "VC-LIVE-ACCESS"
     case liveBrokerUnsupported = "VC-LIVE-BROKER"
     case credentialMissing = "VC-TOKEN-MISSING"
@@ -109,12 +115,14 @@ enum VoiceCoachFailureCode: String, Equatable, Sendable {
 /// Converts all provider, transport, protocol, and audio errors into an
 /// allow-listed support code and copy. Raw provider messages are deliberately
 /// never retained or shown to the family.
-struct VoiceCoachFailure: Equatable, Sendable {
+struct VoiceCoachFailure: Error, Equatable, Sendable {
     let code: VoiceCoachFailureCode
 
     init(error: Error) {
         code = Self.classify(error)
     }
+
+    init(code: VoiceCoachFailureCode) { self.code = code }
 
     func localizedMessage(
         language: InterfaceLanguage,
@@ -122,6 +130,30 @@ struct VoiceCoachFailure: Equatable, Sendable {
     ) -> String {
         let message: String
         switch (code, language) {
+        case (.connectionLost, .german):
+            message = "Die Verbindung wurde unterbrochen. Bitte versuche es erneut, sobald dein Internet stabil ist."
+        case (.connectionLost, .english):
+            message = "The connection was interrupted. Try again when your internet connection is stable."
+        case (.serviceUnavailable, .german):
+            message = "Der Sprachdienst ist vorübergehend nicht erreichbar. Bitte versuche es später erneut."
+        case (.serviceUnavailable, .english):
+            message = "The voice service is temporarily unavailable. Please try again later."
+        case (.serviceLimit, .german):
+            message = "Das heutige Sprachlimit des Dienstes ist erreicht. Du kannst offline weiterüben."
+        case (.serviceLimit, .english):
+            message = "The service's daily voice limit has been reached. You can keep practising offline."
+        case (.cleanupPending, .german):
+            message = "Dein vorheriges Gespräch wird noch beendet. Bitte versuche es gleich erneut."
+        case (.cleanupPending, .english):
+            message = "Your previous conversation is still closing. Please try again shortly."
+        case (.microphonePermission, .german):
+            message = "Das Mikrofon ist ausgeschaltet. Eine erwachsene Person kann es in den iOS-Einstellungen erlauben."
+        case (.microphonePermission, .english):
+            message = "The microphone is off. A parent can allow it in iOS Settings."
+        case (.audioInterrupted, .german):
+            message = "Dein Zeitheld wurde unterbrochen. Bitte starte ihn noch einmal."
+        case (.audioInterrupted, .english):
+            message = "Your Time Hero was interrupted. Please start it again."
         case (.agreementRequired, .german):
             message = "Eine erwachsene Person muss zuerst Datenschutz und Berechtigungen in den Einstellungen bestätigen."
         case (.agreementRequired, .english):
@@ -216,13 +248,19 @@ struct VoiceCoachFailure: Equatable, Sendable {
     }
 
     private static func classify(_ error: Error) -> VoiceCoachFailureCode {
+        if let failure = error as? VoiceCoachFailure { return failure.code }
+        if let setup = error as? LiveConnectionSetupError { return classify(setup.underlying) }
         if let account = error as? ManagedAccountError {
             switch account {
             case .signInRequired, .invalidSignIn: return .credentialUnauthorized
             case .unavailable: return .sessionSetup
+            case .temporarilyUnavailable: return .serviceUnavailable
+            case .serviceLimit: return .serviceLimit
+            case .rateLimited: return .credentialRateLimited
+            case .cleanupPending: return .cleanupPending
             case .trialExhausted: return .trialExhausted
             case .sessionAlreadyActive: return .sessionAlreadyActive
-            case .malformedResponse: return .malformedServiceResponse
+            case .malformedResponse, .sessionNotFound: return .malformedServiceResponse
             case .agreementRequired: return .agreementRequired
             }
         }
@@ -306,6 +344,7 @@ struct VoiceCoachFailure: Equatable, Sendable {
                 return .credentialRateLimited
             case "client_secret_expired", "session_expired":
                 return .credentialExpired
+            case "connection_lost": return .connectionLost
             case "network_offline":
                 return .networkOffline
             case "network_timeout":
@@ -388,6 +427,7 @@ final class VoiceCoachCoordinator {
     private(set) var isSessionActive = false
     private(set) var isStarting = false
     private(set) var isStopping = false
+    private(set) var connectionAttempt = 1
 
     var onClockAnswer: ((ClockAnswerReport) -> Void)?
     var onLiveClockAnswer: ((ClockAnswerReport, Int) -> Void)?
@@ -417,17 +457,22 @@ final class VoiceCoachCoordinator {
     private var sessionLanguage: RealtimeCoachLanguage = .german
     private var learnerContext: ClockLearnerContext?
     private var speakingResponseIDs: Set<String> = []
+    private weak var sessionPreferences: ParentPreferences?
+    private var currentQuestion: TimeQuestion?
+    private var startupFailure: Error?
+    private let retrySleep: @Sendable (Duration) async throws -> Void
 
     init(
         microphonePermission: any MicrophonePermissionProviding = SystemMicrophonePermissionService()
     ) {
         self.microphonePermission = microphonePermission
+        self.retrySleep = { try await Task.sleep(for: $0) }
         self.sessionFactory = { credential in
             let key: String
             switch credential {
             case .parentKey(let value): key = value
             case .managedLive(let endpoint, let token):
-                let session = ManagedLiveSession(baseURL: endpoint, token: token)
+                let session = ManagedLiveSession(baseURL: endpoint, token: token, cleanupOwner: ParentAccount.shared.accountID)
                 return VoiceCoachSessionResources(service: session, audioEngine: session)
             case .legacyBroker: throw LiveServiceError.unsupportedBroker
             }
@@ -445,10 +490,12 @@ final class VoiceCoachCoordinator {
 
     init(
         microphonePermission: any MicrophonePermissionProviding,
-        sessionFactory: @escaping VoiceCoachSessionFactory
+        sessionFactory: @escaping VoiceCoachSessionFactory,
+        retrySleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.microphonePermission = microphonePermission
         self.sessionFactory = sessionFactory
+        self.retrySleep = retrySleep
     }
 
     func start(question: TimeQuestion, preferences: ParentPreferences, learner: ClockLearnerContext? = nil) async {
@@ -458,6 +505,9 @@ final class VoiceCoachCoordinator {
         }
         guard startTask == nil, !isStopping else { return }
         learnerContext = learner
+        sessionPreferences = preferences
+        currentQuestion = question
+        connectionAttempt = 1
         clearTranscripts()
 
         let attemptID = UUID()
@@ -478,92 +528,135 @@ final class VoiceCoachCoordinator {
     }
 
     private func performStart(question: TimeQuestion, preferences: ParentPreferences) async {
-        var installedSessionID: UUID?
-        var startupStage = VoiceCoachStartupStage.preparing
-        do {
-            await waitForPendingTearDown()
-            try Task.checkCancellation()
-            startupStage = .microphonePermission
-            phase = .requestingPermission
-            let permissionGranted: Bool
-            switch microphonePermission.currentPermission() {
-            case .granted:
-                permissionGranted = true
-            case .denied:
-                permissionGranted = false
-            case .undetermined:
-                permissionGranted = await microphonePermission.requestPermission()
-            }
-            guard permissionGranted else {
-                voiceCoachLogger.error(
-                    "startup_failed stage=VC-STAGE-PERMISSION code=VC-MIC-PERMISSION"
-                )
-                phase = .failed(localized(
-                    language: preferences.language,
-                    de: "Das Mikrofon ist ausgeschaltet. Eine erwachsene Person kann es in den iOS-Einstellungen erlauben.",
-                    en: "The microphone is off. A parent can allow it in iOS Settings."
-                ) + " [VC-STAGE-PERMISSION] [VC-MIC-PERMISSION]")
+        while !Task.isCancelled {
+            var installedSessionID: UUID?
+            var startupStage = VoiceCoachStartupStage.preparing
+            startupFailure = nil
+            preferences.connectionHistory.record(.started, mode: preferences.cloudVoiceMode, attempt: connectionAttempt)
+            do {
+                await waitForPendingTearDown()
+                try Task.checkCancellation()
+                startupStage = .microphonePermission
+                phase = connectionAttempt == 1 ? .requestingPermission : .connecting
+                let permissionGranted: Bool
+                switch microphonePermission.currentPermission() {
+                case .granted: permissionGranted = true
+                case .denied: permissionGranted = false
+                case .undetermined: permissionGranted = await microphonePermission.requestPermission()
+                }
+                try Task.checkCancellation()
+                guard permissionGranted else { throw VoiceCoachFailure(code: .microphonePermission) }
+                startupStage = .credentials
+                let credential = try await makeCredential(preferences: preferences)
+                // Stop may have happened while credential refresh was suspended.
+                try Task.checkCancellation()
+                let resources = try sessionFactory(credential)
+                let audioEngine = resources.audioEngine
+                let service = resources.service
+                if let managed = service as? ManagedLiveSession {
+                    managed.connectionHistory = preferences.connectionHistory
+                }
+                let captureAuthorization = audioEngine.authorizeCaptureStart()
+                let newSessionID = UUID()
+                installedSessionID = newSessionID
+                audioEngine.setInterruptionHandler { [weak self] interrupted in
+                    guard interrupted else { return }
+                    Task { @MainActor [weak self] in
+                        await self?.handleAudioInterruption(sessionID: newSessionID)
+                    }
+                }
+                self.audioEngine = audioEngine
+                self.service = service
+                sessionID = newSessionID
+                observe(service, sessionID: newSessionID)
+                phase = .connecting
+                sessionLanguage = preferences.language.realtimeLanguage
+                startupStage = .connection
+                try await service.open(language: sessionLanguage, safetyIdentifier: .init(stableID: preferences.realtimeSafetyIdentifier))
+                try validateStartupSession(newSessionID)
+                startupStage = .challenge
+                try await service.setChallenge(context(for: currentQuestion ?? question))
+                try validateStartupSession(newSessionID)
+                startupStage = .audioCapture
+                try await service.startVoice(authorizedBy: captureAuthorization)
+                try validateStartupSession(newSessionID)
+                isSessionActive = true
+                phase = .listening
+                preferences.connectionHistory.record(.connected, mode: preferences.cloudVoiceMode, attempt: connectionAttempt)
+                return
+            } catch {
+                let failure: Error = error is LiveConnectionSetupError ? error : (startupFailure ?? error)
+                let cancelled = Task.isCancelled || (error is CancellationError && startupFailure == nil)
+                clearTranscripts()
+                // Complete cleanup before any replacement session can be admitted.
+                if let installedSessionID { await tearDown(sessionID: installedSessionID) }
+                if cancelled || Task.isCancelled {
+                    preferences.connectionHistory.record(.cancelled, mode: preferences.cloudVoiceMode, attempt: connectionAttempt, stage: startupStage)
+                    return
+                }
+                preferences.connectionHistory.record(.failed, mode: preferences.cloudVoiceMode,
+                    attempt: connectionAttempt, stage: startupStage, error: failure)
+                if connectionAttempt < LiveConnectionRetryPolicy.maximumAttempts,
+                   LiveConnectionRetryPolicy.permits(VoiceCoachFailure(error: failure).code) {
+                    connectionAttempt += 1
+                    phase = .connecting
+                    preferences.connectionHistory.record(.retrying, mode: preferences.cloudVoiceMode, attempt: connectionAttempt)
+                    do { try await retrySleep(LiveConnectionRetryPolicy.delay(beforeAttempt: connectionAttempt)) }
+                    catch { return }
+                    continue
+                }
+                phase = .failed(safeMessage(for: failure, language: preferences.language, startupStage: startupStage))
                 return
             }
-            try Task.checkCancellation()
+        }
+    }
 
-            startupStage = .credentials
-            let credential = try await makeCredential(preferences: preferences)
-            let resources = try sessionFactory(credential)
-            let audioEngine = resources.audioEngine
-            let service = resources.service
-            let captureAuthorization = audioEngine.authorizeCaptureStart()
-            let newSessionID = UUID()
-            installedSessionID = newSessionID
-            audioEngine.setInterruptionHandler { [weak self] interrupted in
-                guard interrupted else { return }
-                Task { @MainActor [weak self] in
-                    await self?.handleAudioInterruption(sessionID: newSessionID)
-                }
-            }
-            self.audioEngine = audioEngine
-            self.service = service
-            sessionID = newSessionID
-            observe(service, sessionID: newSessionID)
+    private func validateStartupSession(_ id: UUID) throws {
+        try Task.checkCancellation()
+        if let startupFailure { throw startupFailure }
+        guard sessionID == id else { throw CancellationError() }
+    }
 
-            phase = .connecting
-            sessionLanguage = preferences.language.realtimeLanguage
-            let safetyIdentifier = RealtimeSafetyIdentifier(
-                stableID: preferences.realtimeSafetyIdentifier
-            )
-            startupStage = .connection
-            try await service.open(language: sessionLanguage, safetyIdentifier: safetyIdentifier)
-            guard sessionID == newSessionID else { throw CancellationError() }
-            try Task.checkCancellation()
-            isSessionActive = true
-            startupStage = .challenge
-            try await service.setChallenge(context(for: question))
-            guard sessionID == newSessionID else { throw CancellationError() }
-            try Task.checkCancellation()
-            startupStage = .audioCapture
-            try await service.startVoice(authorizedBy: captureAuthorization)
-            guard sessionID == newSessionID else { throw CancellationError() }
-            try Task.checkCancellation()
-            phase = .listening
-        } catch is CancellationError {
-            clearTranscripts()
-            if let installedSessionID {
-                await tearDown(sessionID: installedSessionID)
-            }
-        } catch {
-            clearTranscripts()
-            phase = .failed(safeMessage(
-                for: error,
-                language: preferences.language,
-                startupStage: startupStage
-            ))
-            if let installedSessionID {
-                await tearDown(sessionID: installedSessionID)
+    /// Recovery uses the same per-start budget and current clock. It never
+    /// resumes after Stop, navigation, permission withdrawal or backgrounding.
+    private func recover(from error: Error, sessionID: UUID) {
+        let failure = VoiceCoachFailure(error: error)
+        sessionPreferences?.connectionHistory.record(.failed, mode: sessionPreferences?.cloudVoiceMode ?? .offline,
+                                                     attempt: connectionAttempt, error: error)
+        audioEngine?.stopAll()
+        eventTask?.cancel(); eventTask = nil
+        isSessionActive = false
+        clearTranscripts()
+        scheduleTearDown(sessionID: sessionID)
+        guard LiveConnectionRetryPolicy.permits(failure.code),
+              connectionAttempt < LiveConnectionRetryPolicy.maximumAttempts,
+              let preferences = sessionPreferences, let question = currentQuestion,
+              !isStopping else {
+            phase = .failed(failure.localizedMessage(language: interfaceLanguageForSession))
+            return
+        }
+        connectionAttempt += 1
+        phase = .connecting
+        isStarting = true
+        let attemptID = UUID()
+        startAttemptID = attemptID
+        preferences.connectionHistory.record(.retrying, mode: preferences.cloudVoiceMode, attempt: connectionAttempt)
+        startTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                await self.waitForPendingTearDown()
+                try await self.retrySleep(LiveConnectionRetryPolicy.delay(beforeAttempt: self.connectionAttempt))
+                try Task.checkCancellation()
+                await self.performStart(question: question, preferences: preferences)
+            } catch { /* Stop cancels the pending recovery. */ }
+            if self.startAttemptID == attemptID {
+                self.startTask = nil; self.startAttemptID = nil; self.isStarting = false
             }
         }
     }
 
     func updateChallenge(_ question: TimeQuestion) async {
+        currentQuestion = question
         guard let service, isSessionActive else { return }
         clearTranscripts()
         do {
@@ -587,7 +680,11 @@ final class VoiceCoachCoordinator {
     func stop() async {
         guard !isStopping else { return }
         isStopping = true
+        if sessionID != nil || startTask != nil || isSessionActive || isStarting {
+            sessionPreferences?.connectionHistory.record(.stopped, mode: sessionPreferences?.cloudVoiceMode ?? .offline, attempt: connectionAttempt)
+        }
         stopLocalAudioImmediately()
+        phase = .idle
         let pendingStart = startTask
         startTask = nil
         startAttemptID = nil
@@ -604,6 +701,7 @@ final class VoiceCoachCoordinator {
         phase = .idle
         clearTranscripts()
         isStopping = false
+        sessionPreferences = nil; currentQuestion = nil
     }
 
     /// Stops microphone capture and speaker playback synchronously on the main
@@ -745,20 +843,21 @@ final class VoiceCoachCoordinator {
         case let .clockAnswerReported(report, _):
             onClockAnswer?(report)
         case let .serverError(error):
-            stopLocalAudioImmediately()
-            let failure = VoiceCoachFailure(error: error)
-            voiceCoachLogger.error(
-                "session_failed code=\(failure.code.rawValue, privacy: .public)"
-            )
-            phase = .failed(failure.localizedMessage(
-                language: interfaceLanguageForSession
-            ))
-            scheduleTearDown(sessionID: sessionID)
+            if isStarting, !isSessionActive {
+                startupFailure = error
+                audioEngine?.stopAll()
+            } else {
+                recover(from: error, sessionID: sessionID)
+            }
         case let .connectionStateChanged(state):
-            if state == .disconnected {
-                isSessionActive = false
-                clearTranscripts()
+            if state == .disconnected, !isStarting || isSessionActive {
+                // A normal provider close (expiry/Stop) must not open another
+                // paid session. Transport failures send a typed error first.
+                sessionPreferences?.connectionHistory.record(.stopped, mode: sessionPreferences?.cloudVoiceMode ?? .offline,
+                                                             attempt: connectionAttempt)
+                stopLocalAudioImmediately()
                 if case .failed = phase {} else { phase = .idle }
+                scheduleTearDown(sessionID: sessionID)
             }
         }
     }
@@ -802,6 +901,8 @@ final class VoiceCoachCoordinator {
 
     private func handleAudioInterruption(sessionID: UUID) async {
         guard self.sessionID == sessionID, isSessionActive || isStarting else { return }
+        sessionPreferences?.connectionHistory.record(.failed, mode: sessionPreferences?.cloudVoiceMode ?? .offline,
+                                                     attempt: connectionAttempt, error: VoiceCoachFailure(code: .audioInterrupted))
         stopLocalAudioImmediately()
         voiceCoachLogger.error(
             "session_failed code=VC-AUDIO-INTERRUPTED"

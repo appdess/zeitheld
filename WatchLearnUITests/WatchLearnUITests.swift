@@ -6,6 +6,42 @@ final class WatchLearnUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testConnectionReportSurvivesRelaunchAndCanBeCleared() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--english", "--ui-testing-connection-report"]
+        app.launch()
+        app.buttons["parent-settings-button"].tap()
+        let share = app.buttons["share-connection-report"]
+        scrollTo(share, in: app)
+        XCTAssertTrue(share.isHittable)
+        let recent = app.buttons["Recent attempts"]
+        scrollTo(recent, in: app)
+        recent.tap()
+        let report = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "VC-NETWORK-TIMEOUT")).firstMatch
+        scrollTo(report, in: app)
+        XCTAssertTrue(report.label.contains("sessionStarted"))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Persistent connection report"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.terminate()
+        app.launchArguments = ["--ui-testing", "--english"]
+        app.launch()
+        app.buttons["parent-settings-button"].tap()
+        scrollTo(share, in: app)
+        XCTAssertTrue(share.isHittable)
+        let clear = app.buttons["clear-connection-reports"]
+        scrollTo(clear, in: app)
+        clear.tap()
+        XCTAssertFalse(share.exists)
+        app.terminate()
+        app.launch()
+        app.buttons["parent-settings-button"].tap()
+        let empty = app.staticTexts["No connection reports yet."]
+        scrollTo(empty, in: app)
+        XCTAssertTrue(empty.isHittable)
+    }
+
     /// Paid device regression using the actual signed-in account and button.
     /// No fixture arguments: preserve the parent's existing consent and settings.
     func testSignedInLiveVoiceButtonStartsAndStops() throws {

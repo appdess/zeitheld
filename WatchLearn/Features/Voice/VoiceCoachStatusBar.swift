@@ -85,7 +85,9 @@ struct VoiceCoachStatusBar: View {
         case .requestingPermission:
             copy(de: "Mikrofon-Freigabe", en: "Microphone permission")
         case .connecting:
-            copy(de: "Verbindung zu deinem Zeithelden …", en: "Connecting to your Time Hero…")
+            coordinator.connectionAttempt > 1
+                ? copy(de: "Verbinde erneut (\(coordinator.connectionAttempt)/3) …", en: "Reconnecting (\(coordinator.connectionAttempt)/3)…")
+                : copy(de: "Verbindung zu deinem Zeithelden …", en: "Connecting to your Time Hero…")
         case .listening:
             copy(de: "Du bist dran – ich höre zu", en: "Your turn — I’m listening")
         case .childSpeaking:
@@ -104,7 +106,7 @@ struct VoiceCoachStatusBar: View {
         case .coachSpeaking:
             ""
         case .failed:
-            copy(de: "Tippe auf Stopp und versuche es noch einmal.", en: "Tap stop, then try again.")
+            copy(de: "Bericht in Einstellungen → Verbindungsberichte.", en: "Report in Settings → Connection reports.")
         default:
             copy(
                 de: "Der rote Stopp-Knopf schaltet das Mikrofon immer aus.",

@@ -54,9 +54,15 @@ struct AccountAllowance: Decodable, Sendable {
 }
 
 enum ManagedAccountError: LocalizedError {
+    case temporarilyUnavailable, serviceLimit, rateLimited, cleanupPending, sessionNotFound
     case signInRequired, unavailable, invalidSignIn, trialExhausted, sessionAlreadyActive, malformedResponse, agreementRequired
     var errorDescription: String? {
         switch self {
+        case .temporarilyUnavailable: "The voice service is temporarily unavailable."
+        case .serviceLimit: "The service's daily limit has been reached."
+        case .rateLimited: "The service is busy. Please wait before trying again."
+        case .cleanupPending: "The previous conversation is still closing."
+        case .sessionNotFound: "The session no longer exists."
         case .signInRequired: "Sign in with Apple in parent settings."
         case .unavailable: "The service is not available yet."
         case .invalidSignIn: "Apple sign-in could not be verified."
@@ -73,6 +79,12 @@ enum ManagedAccountError: LocalizedError {
         if status == 403, payload?["error"] as? String == "agreement_required" { return .agreementRequired }
         if status == 402 { return .trialExhausted }
         if status == 409, payload?["error"] as? String == "session_already_active" { return .sessionAlreadyActive }
+        if status == 404 { return .sessionNotFound }
+        if status == 429 { return .rateLimited }
+        let code = payload?["error"] as? String
+        if code == "service_daily_limit" { return .serviceLimit }
+        if ["close_in_progress", "close_retry_needed", "session_initialization_incomplete"].contains(code ?? "") { return .cleanupPending }
+        if status >= 500, ["provider_unavailable", "deadline_unavailable", "service_unavailable"].contains(code ?? "") { return .temporarilyUnavailable }
         return .unavailable
     }
 }
@@ -192,13 +204,30 @@ final class ParentAccount {
 
     func voiceCredential() async throws -> VoiceCoachCredential {
         guard signedIn, let base = ManagedServiceConfiguration.baseURL else { throw ManagedAccountError.signInRequired }
+        if let owner = accountID {
+            do {
+                try await PendingLiveSessionStore.shared.reconcile(baseURL: base, ownerID: owner) { id in
+                    do {
+                        let data = try await self.request(path: "v1/sessions/\(id)/close", method: "POST", timeout: 30)
+                        guard (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["closed"] as? Bool == true else {
+                            throw ManagedAccountError.malformedResponse
+                        }
+                    } catch ManagedAccountError.sessionNotFound { /* Server retention has removed this owned handle. */ }
+                }
+            } catch {
+                try Task.checkCancellation()
+                if case ManagedAccountError.signInRequired = error { throw error }
+                throw ManagedAccountError.cleanupPending
+            }
+        }
         let data = try await request(path: "v1/account")
         let value = try JSONDecoder().decode(AccountAllowance.self, from: data)
         allowance = value
         guard value.consent?.isCurrent == true, value.consent?.voice == true else { throw ManagedAccountError.agreementRequired }
         guard value.available else { throw ManagedAccountError.unavailable }
-        guard !value.active else { throw ManagedAccountError.sessionAlreadyActive }
-        guard value.unlimited || (value.remainingSeconds ?? 0) > 0 else { throw ManagedAccountError.trialExhausted }
+        // Session creation reconciles expired/closing reservations on the
+        // server. Rejecting here would bypass that recovery forever.
+        guard value.active || value.unlimited || (value.remainingSeconds ?? 0) > 0 else { throw ManagedAccountError.trialExhausted }
         return .managedLive(base, try await idToken())
     }
 
@@ -242,11 +271,6 @@ final class ParentAccount {
         guard let response = response as? HTTPURLResponse else {
             bytes.task.cancel(); throw ManagedAccountError.unavailable
         }
-        guard response.statusCode == 200 else {
-            bytes.task.cancel()
-            if response.statusCode == 422 { throw HeroOpenAIServiceError.contentRejected }
-            throw HeroOpenAIServiceError.httpStatus(response.statusCode, requestID: nil)
-        }
         guard response.expectedContentLength <= maximumResponseBytes else {
             bytes.task.cancel(); throw HeroOpenAIServiceError.responseTooLarge
         }
@@ -256,6 +280,13 @@ final class ParentAccount {
                 bytes.task.cancel(); throw HeroOpenAIServiceError.responseTooLarge
             }
             data.append(byte)
+        }
+        guard response.statusCode == 200 else {
+            if path == "v1/account" || path.hasPrefix("v1/sessions/") {
+                throw ManagedAccountError.responseError(status: response.statusCode, data: data)
+            }
+            if response.statusCode == 422 { throw HeroOpenAIServiceError.contentRejected }
+            throw HeroOpenAIServiceError.httpStatus(response.statusCode, requestID: nil)
         }
         return data
     }

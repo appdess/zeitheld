@@ -10,6 +10,13 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
     private let continuation: AsyncStream<RealtimeServiceEvent>.Continuation
     private let baseURL: URL
     private let token: String
+    private let cleanupOwner: String?
+    private let cleanupStore: PendingLiveSessionStore
+    var connectionHistory: LiveConnectionHistory?
+    private var transportFailure: VoiceCoachFailure?
+    private var normalEndReceived = false
+    private var transportWatchdog: Task<Void, Never>?
+    private var transportHealth = LiveTransportHealth()
     private let factory: RTCPeerConnectionFactory
     private let authorization = RealtimeAudioCaptureAuthorizationState()
     private var peer: RTCPeerConnection?
@@ -41,8 +48,10 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
     private var interruptionHandler: (@Sendable (Bool) -> Void)?
     private var interruptionObserver: NSObjectProtocol?
 
-    init(baseURL: URL, token: String, factory: RTCPeerConnectionFactory = RTCPeerConnectionFactory()) {
+    init(baseURL: URL, token: String, factory: RTCPeerConnectionFactory = RTCPeerConnectionFactory(),
+         cleanupOwner: String? = nil, cleanupStore: PendingLiveSessionStore = .shared) {
         self.factory = factory
+        self.cleanupOwner = cleanupOwner; self.cleanupStore = cleanupStore
         self.baseURL = baseURL; self.token = token
         let stream = AsyncStream.makeStream(of: RealtimeServiceEvent.self, bufferingPolicy: .bufferingNewest(200))
         events = stream.stream; continuation = stream.continuation
@@ -51,6 +60,8 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
 
     func open(language: RealtimeCoachLanguage, safetyIdentifier: RealtimeSafetyIdentifier) async throws {
         guard peer == nil, !closing else { throw RealtimeServiceError.alreadyConnected }
+        try Task.checkCancellation()
+        transportFailure = nil; normalEndReceived = false; transportHealth = LiveTransportHealth()
         connectionGeneration &+= 1
         let generation = connectionGeneration
         continuation.yield(.connectionStateChanged(.connecting))
@@ -74,25 +85,25 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
         let dataConfig = RTCDataChannelConfiguration()
         dataConfig.isOrdered = true
         var createdSessionID: String?
-        var setupStage = "data-channel"
+        var setupStage = LiveConnectionStage.dataChannel
         do {
             guard let channel = peer.dataChannel(forLabel: "oai-events", configuration: dataConfig) else { throw ManagedAccountError.unavailable }
             self.channel = channel; channel.delegate = self
-            setupStage = "offer"
+            setupStage = .offer
             let offer: RTCSessionDescription = try await withCheckedThrowingContinuation { waiter in
                 peer.offer(for: RTCMediaConstraints(mandatoryConstraints: ["OfferToReceiveAudio": "true"], optionalConstraints: nil)) { value, error in
                     if let value { waiter.resume(returning: value) } else { waiter.resume(throwing: error ?? ManagedAccountError.unavailable) }
                 }
             }
             try requireCurrentConnection(peer, generation: generation)
-            setupStage = "local-description"
+            setupStage = .localDescription
             try await withCheckedThrowingContinuation { (waiter: CheckedContinuation<Void, Error>) in
                 peer.setLocalDescription(offer) { error in
                     if let error { waiter.resume(throwing: error) } else { waiter.resume() }
                 }
             }
             try requireCurrentConnection(peer, generation: generation)
-            setupStage = "ice-gathering"
+            setupStage = .iceGathering
             let iceDeadline = Date().addingTimeInterval(8)
             while peer.iceGatheringState != .complete && Date() < iceDeadline {
                 try await Task.sleep(for: .milliseconds(50))
@@ -100,14 +111,15 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
             try Task.checkCancellation()
             try requireCurrentConnection(peer, generation: generation)
             guard peer.iceGatheringState == .complete,
-                  let sdp = peer.localDescription?.sdp else { throw ManagedAccountError.unavailable }
-            setupStage = "session-request"
+                  let sdp = peer.localDescription?.sdp else { throw LiveServiceError.handshakeTimeout }
+            setupStage = .sessionRequest
             let data = try await request("v1/sessions", body: ["language": language == .english ? "en" : "de", "sdp": sdp])
-            setupStage = "session-response"
+            setupStage = .sessionResponse
             // Retain the cleanup handle even if another response field is malformed.
             if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let id = object["id"] as? String, UUID(uuidString: id) != nil {
                 createdSessionID = id
+                if let cleanupOwner { cleanupStore.register(id, baseURL: baseURL, ownerID: cleanupOwner) }
                 if generation == connectionGeneration, self.peer === peer, !closing {
                     localSessionID = id
                 }
@@ -117,14 +129,14 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
             guard createdSessionID == session.id else { throw ManagedAccountError.unavailable }
             localSessionID = session.id
             try Task.checkCancellation()
-            setupStage = "remote-description"
+            setupStage = .remoteDescription
             try await withCheckedThrowingContinuation { (waiter: CheckedContinuation<Void, Error>) in
                 peer.setRemoteDescription(RTCSessionDescription(type: .answer, sdp: session.sdp)) { error in
                     if let error { waiter.resume(throwing: error) } else { waiter.resume() }
                 }
             }
             try requireCurrentConnection(peer, generation: generation)
-            setupStage = "session-started"
+            setupStage = .sessionStarted
             let deadline = Date().addingTimeInterval(15)
             while !ready && Date() < deadline && generation == connectionGeneration && self.peer === peer && !closing {
                 try await Task.sleep(for: .milliseconds(50))
@@ -138,7 +150,7 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
             }
         } catch {
             let failure = error as NSError
-            diagnostics?("setup_failed stage=\(setupStage) domain=\(failure.domain) code=\(failure.code)")
+            diagnostics?("setup_failed stage=\(setupStage.rawValue) code=\(failure.code)")
             if case let DecodingError.keyNotFound(key, _) = error {
                 diagnostics?("response_missing_field=\(key.stringValue)")
             }
@@ -147,14 +159,16 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
             } else if let id = createdSessionID {
                 // A late startup response owns only its original server session.
                 // It must not overwrite or disconnect a newer connection.
-                _ = try? await Task { try await self.request("v1/sessions/\(id)/close", body: [:]) }.value
+                await Task { await self.closeOwnedSession(id) }.value
             }
-            throw error
+            if Task.isCancelled { throw CancellationError() }
+            throw LiveConnectionSetupError(stage: setupStage, underlying: transportFailure ?? error)
         }
     }
 
     private func requireCurrentConnection(_ peer: RTCPeerConnection, generation: UInt64) throws {
         try Task.checkCancellation()
+        if let transportFailure { throw transportFailure }
         guard generation == connectionGeneration, self.peer === peer, !closing else { throw CancellationError() }
     }
 
@@ -175,9 +189,12 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
         do {
             audio.lockForConfiguration()
             defer { audio.unlockForConfiguration() }
-            try audio.setCategory(AVAudioSession.Category.playAndRecord, with: [.defaultToSpeaker, .allowBluetooth])
-            try audio.setMode(AVAudioSession.Mode.voiceChat)
-            try audio.setActive(true)
+            do {
+                try audio.setCategory(AVAudioSession.Category.playAndRecord, with: [.defaultToSpeaker, .allowBluetooth])
+                try audio.setMode(AVAudioSession.Mode.voiceChat)
+            } catch { throw RealtimeAudioEngineError.audioSessionConfigurationFailed }
+            do { try audio.setActive(true) }
+            catch { throw RealtimeAudioEngineError.audioSessionActivationFailed }
             ownsAudioActivation = true
         }
         // Enabling tracks can synchronously wait for WebRTC's audio worker.
@@ -208,10 +225,11 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
     private func performDisconnect() async {
         closing = true; ready = false; connectionGeneration &+= 1; revision &+= 1
         pendingDelegations.removeAll()
+        transportWatchdog?.cancel(); transportWatchdog = nil
         stopAll(); expiryTask?.cancel(); delegationTask?.cancel()
         // Stop capture/playback immediately. Keep transport alive while the server
         // closes Live and collects authoritative final usage.
-        if let id = localSessionID { _ = try? await request("v1/sessions/\(id)/close", body: [:]) }
+        if let id = localSessionID { await closeOwnedSession(id) }
         channel?.close(); channel = nil
         peer?.close(); peer = nil
         if ownsAudioActivation {
@@ -225,6 +243,59 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
         challenge = nil; transcript = ""; handledDelegations.removeAll(); sentVoiceReady = false
         closing = false
         continuation.yield(.connectionStateChanged(.disconnected))
+    }
+
+    private func closeOwnedSession(_ id: String) async {
+        cleanupStore.release(id)
+        for attempt in 1...2 {
+            do {
+                do {
+                    // The backend's provider-close deadline is 23 seconds.
+                    let data = try await request("v1/sessions/\(id)/close", body: [:], timeout: 30)
+                    guard (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["closed"] as? Bool == true else {
+                        throw ManagedAccountError.malformedResponse
+                    }
+                } catch ManagedAccountError.sessionNotFound { /* Already removed by the server. */ }
+                if let cleanupOwner { cleanupStore.remove(id, baseURL: baseURL, ownerID: cleanupOwner) }
+                connectionHistory?.record(.stopped, operation: .cleanup, mode: .managedAccount)
+                return
+            } catch {
+                if attempt == 1, LiveConnectionRetryPolicy.permits(VoiceCoachFailure(error: error).code) {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    continue
+                }
+                connectionHistory?.record(.failed, operation: .cleanup, mode: .managedAccount,
+                                          error: error)
+                return
+            }
+        }
+    }
+
+    private func failTransport() {
+        guard peer != nil, !closing, !normalEndReceived, transportFailure == nil else { return }
+        transportFailure = VoiceCoachFailure(code: .connectionLost)
+        stopAll()
+        continuation.yield(.serverError(.init(type: nil, code: "connection_lost", message: "Connection lost", parameter: nil, eventID: nil)))
+        Task { await disconnect() }
+    }
+
+    private func observeTransport(_ state: LiveTransportHealth.State) {
+        guard peer != nil, !closing else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        let decision = transportHealth.observe(state, at: now)
+        transportWatchdog?.cancel(); transportWatchdog = nil
+        if decision == .failed { failTransport() }
+        else if decision == .waiting {
+            let generation = connectionGeneration
+            let remaining = transportHealth.remainingGrace(at: now)
+            transportWatchdog = Task { [weak self] in
+                do { try await Task.sleep(for: .seconds(remaining)) } catch { return }
+                guard let self, generation == self.connectionGeneration, !self.closing else { return }
+                if self.transportHealth.observe(.disconnected, at: ProcessInfo.processInfo.systemUptime) == .failed {
+                    self.failTransport()
+                }
+            }
+        }
     }
 
     func authorizeCaptureStart() -> RealtimeAudioCaptureAuthorization { authorization.issue() }
@@ -253,11 +324,19 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
               let type = event["type"] as? String else { return }
         switch type {
         case "session.started":
+            guard !closing, !ready else { return }
             ready = true; continuation.yield(.connectionStateChanged(.connected(sessionID: nil)))
         case "session.closed":
+            normalEndReceived = ready
+            if !ready { transportFailure = VoiceCoachFailure(code: .connectionLost) }
             Task { await disconnect() }
         case "error":
-            continuation.yield(.serverError(.init(type: nil, code: "live_session_failed", message: "Live failed", parameter: nil, eventID: nil)))
+            let code = (event["error"] as? [String: Any])?["code"] as? String
+            let failure = VoiceCoachFailure(error: RealtimeAPIError(type: nil, code: code, message: "Live failed", parameter: nil, eventID: nil))
+            transportFailure = failure
+            stopAll()
+            // Only the allow-listed classification reaches diagnostic storage.
+            continuation.yield(.serverError(.init(type: nil, code: code, message: "Live failed", parameter: nil, eventID: nil)))
             Task { await disconnect() }
         case "session.input_transcript.delta", "session.output_transcript.delta":
             guard let delta = event["delta"] as? String, delta.utf8.count <= 10000 else { return }
@@ -387,9 +466,9 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
         guard ready, let channel, channel.readyState == .open,
               channel.sendData(RTCDataBuffer(data: Data(text.utf8), isBinary: false)) else { throw RealtimeServiceError.notConnected }
     }
-    private func request(_ path: String, body: [String: Any]) async throws -> Data {
+    private func request(_ path: String, body: [String: Any], timeout: TimeInterval = 30) async throws -> Data {
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
-        request.httpMethod = "POST"; request.timeoutInterval = 30
+        request.httpMethod = "POST"; request.timeoutInterval = timeout
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -403,7 +482,15 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
 }
 
 extension ManagedLiveSession: RTCDataChannelDelegate, RTCPeerConnectionDelegate {
-    nonisolated func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {}
+    nonisolated func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {
+        let identity = ObjectIdentifier(dataChannel)
+        let closed = dataChannel.readyState == .closed
+        guard closed else { return }
+        Task { @MainActor [weak self] in
+            guard let self, let channel = self.channel, ObjectIdentifier(channel) == identity, !self.closing else { return }
+            self.failTransport()
+        }
+    }
     nonisolated func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
         let data = buffer.data
         let identity = ObjectIdentifier(dataChannel)
@@ -424,14 +511,20 @@ extension ManagedLiveSession: RTCDataChannelDelegate, RTCPeerConnectionDelegate 
     nonisolated func peerConnection(_ peerConnection: RTCPeerConnection, didRemove stream: RTCMediaStream) {}
     nonisolated func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {}
     nonisolated func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {
-        if newState == .failed {
-            let identity = ObjectIdentifier(peerConnection)
-            Task { @MainActor [weak self] in
-                guard let self, let current = self.peer, ObjectIdentifier(current) == identity, !self.closing else { return }
-                await self.disconnect()
-            }
+        let identity = ObjectIdentifier(peerConnection)
+        let state: LiveTransportHealth.State
+        switch newState {
+        case .connected, .completed: state = .connected
+        case .disconnected: state = .disconnected
+        case .failed, .closed: state = .failed
+        default: return
+        }
+        Task { @MainActor [weak self] in
+            guard let self, let current = self.peer, ObjectIdentifier(current) == identity, !self.closing else { return }
+            self.observeTransport(state)
         }
     }
+
     nonisolated func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {}
     nonisolated func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {}
     nonisolated func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}

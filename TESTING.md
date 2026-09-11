@@ -23,6 +23,15 @@ audio/session state, prompt and image boundaries, cancellation, navigation,
 privacy confirmation, optional purpose separation and withdrawal. UI tests use
 explicit Debug-only fixtures; they do not prove live model behavior.
 
+`LiveConnectionRecoveryTests` covers bounded retries, cleanup before replacement,
+Stop during backoff, current-clock recovery, repeated network loss, normal
+session completion, ICE handover grace, safe diagnostic persistence and
+account-scoped pending cleanup. The connection-report UI test verifies the
+Settings report survives relaunch and stays deleted after Clear reports.
+These checks use synthetic services and do not spend Live minutes. Physical
+Wi-Fi/cellular handover, backgrounding and signed-in restart/cleanup still need
+an explicitly enabled device test before claiming live network reliability.
+
 The Hero Lab fixture shows recording, processing and accepted text without using
 a microphone. Generation and transcription pause at a Debug-only request gate.
 XCTest first observes the pending UI state, then taps the fixture completion

@@ -18,6 +18,133 @@ struct RootView: View {
     @State private var voiceChildID: UUID?
 
     var body: some View {
+        lifecycleAwareTabs
+        .task {
+            if preferences.cloudVoiceMode == .managedAccount,
+               preferences.agreementAcceptance?.accountID != ParentAccount.shared.accountID {
+                preferences.clearAgreement()
+            }
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--ui-testing-voice-status") {
+                voiceCoach.showCoachSpeakingStatusForUITesting()
+            }
+            #endif
+            voiceCoach.onClockAnswer = { report in
+                guard voiceChildID == learningViewModel.journeys?.selectedID,
+                      let hour = report.hour, let minute = report.minute, !report.unknown else {
+                    return
+                }
+                learningViewModel.chooseSpoken(ClockTime(hour: hour, minute: minute))
+            }
+            voiceCoach.onLiveClockAnswer = { report, questionID in
+                guard voiceChildID == learningViewModel.journeys?.selectedID,
+                      learningViewModel.question.id == questionID,
+                      let hour = report.hour, let minute = report.minute, !report.unknown else { return }
+                learningViewModel.chooseSpoken(ClockTime(hour: hour, minute: minute))
+            }
+            voiceCoach.onSpokenCorrectAnswerFeedbackFinished = { questionID, _ in
+                guard learningViewModel.question.id == questionID else { return }
+                learningViewModel.continueAfterSpokenFeedback(questionID: questionID)
+            }
+            voiceCoach.onSpokenAutoAdvanceCancelled = {
+                learningViewModel.cancelSpokenAutoAdvance()
+            }
+            if let saved = try? await generatedHeroImageStore.loadSelectedBackground() {
+                selectedHeroBackgroundData = saved.imageData
+            }
+        }
+    }
+
+    // Smaller opaque view expressions keep Xcode 26.2 type checking bounded.
+    private var lifecycleAwareTabs: some View {
+        permissionAwareTabs
+        .onChange(of: learningViewModel.question.id) { _, _ in
+            guard voiceCoach.isSessionActive else { return }
+            Task { await voiceCoach.updateChallenge(learningViewModel.question) }
+        }
+        .onChange(of: voiceCoach.phase) { _, phase in
+            if phase == .listening, voiceChildID == learningViewModel.journeys?.selectedID {
+                learningViewModel.journeys?.markVoiceLearningStarted()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { preferences.refreshDeviceLanguage() }
+            if phase != .active {
+                voiceCoach.stopLocalAudioImmediately()
+                Task { await voiceCoach.stop() }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .generatedHeroImagesWillDelete)) { _ in
+            selectedHeroBackgroundData = nil
+        }
+    }
+
+    private var permissionAwareTabs: some View {
+        configuredTabs
+        .onChange(of: learningViewModel.language) { _, language in
+            let shouldRestartVoice = voiceCoach.isSessionActive || voiceCoach.isStarting
+            if shouldRestartVoice {
+                voiceCoach.stopLocalAudioImmediately()
+                Task {
+                    await voiceCoach.stop()
+                    guard cloudVoiceIsReady, selectedTab == 0 else { return }
+                    voiceChildID = learningViewModel.journeys?.selectedID
+                    await voiceCoach.start(
+                        question: learningViewModel.question,
+                        preferences: preferences,
+                        learner: learningViewModel.journeys?.selected.voiceLearningContext
+                    )
+                }
+            }
+        }
+        .onChange(of: preferences.language) { _, language in
+            learningViewModel.setLanguage(language.learningLanguage)
+        }
+        .onChange(of: preferences.hasCloudVoiceConsent) { _, enabled in
+            if !enabled {
+                voiceCoach.stopLocalAudioImmediately()
+                Task { await voiceCoach.stop() }
+            }
+        }
+        .onChange(of: preferences.hasHeroGenerationConsent) { _, enabled in
+            if !enabled { heroLabViewModel.cancelCloudWork() }
+        }
+    }
+
+    private var configuredTabs: some View {
+        tabs
+        .toolbar(.hidden, for: .tabBar)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                if selectedTab == 0, voiceCoach.phase.isVisible {
+                    VoiceCoachStatusBar(
+                        coordinator: voiceCoach,
+                        language: preferences.language
+                    )
+                }
+                MainTabBar(
+                    selection: tabSelection,
+                    language: learningViewModel.language
+                )
+            }
+        }
+        .tint(.indigo)
+        // ZeitHeld uses a fixed, bright learning palette. Keeping the app in a
+        // light appearance prevents system controls from silently switching to
+        // dark surfaces while the teaching text remains dark blue.
+        .preferredColorScheme(.light)
+        .sheet(isPresented: $showingParentSettings, onDismiss: parentSettingsDismissed) {
+            ParentSettingsView(
+                preferences: preferences,
+                generatedHeroImageStore: generatedHeroImageStore,
+                learningViewModel: learningViewModel
+            ) {
+                showingParentSettings = false
+            }
+        }
+    }
+
+    private var tabs: some View {
         TabView(selection: tabSelection) {
             NavigationStack {
                 LearningView(
@@ -73,116 +200,6 @@ struct RootView: View {
             JourneyView(model: learningViewModel, onLearn: { selectedTab = 0 }, onSettings: openParentSettings)
                 .tabItem { Label(copy(de: "Lernreise", en: "Journey"), systemImage: "map.fill") }
                 .tag(2)
-        }
-        .toolbar(.hidden, for: .tabBar)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 0) {
-                if selectedTab == 0, voiceCoach.phase.isVisible {
-                    VoiceCoachStatusBar(
-                        coordinator: voiceCoach,
-                        language: preferences.language
-                    )
-                }
-                MainTabBar(
-                    selection: tabSelection,
-                    language: learningViewModel.language
-                )
-            }
-        }
-        .tint(.indigo)
-        // ZeitHeld uses a fixed, bright learning palette. Keeping the app in a
-        // light appearance prevents system controls from silently switching to
-        // dark surfaces while the teaching text remains dark blue.
-        .preferredColorScheme(.light)
-        .sheet(isPresented: $showingParentSettings, onDismiss: parentSettingsDismissed) {
-            ParentSettingsView(
-                preferences: preferences,
-                generatedHeroImageStore: generatedHeroImageStore,
-                learningViewModel: learningViewModel
-            ) {
-                showingParentSettings = false
-            }
-        }
-        .onChange(of: learningViewModel.language) { _, language in
-            let shouldRestartVoice = voiceCoach.isSessionActive || voiceCoach.isStarting
-            if shouldRestartVoice {
-                voiceCoach.stopLocalAudioImmediately()
-                Task {
-                    await voiceCoach.stop()
-                    guard cloudVoiceIsReady, selectedTab == 0 else { return }
-                    voiceChildID = learningViewModel.journeys?.selectedID
-                    await voiceCoach.start(
-                        question: learningViewModel.question,
-                        preferences: preferences,
-                        learner: learningViewModel.journeys?.selected.voiceLearningContext
-                    )
-                }
-            }
-        }
-        .onChange(of: preferences.language) { _, language in
-            learningViewModel.setLanguage(language.learningLanguage)
-        }
-        .onChange(of: preferences.hasCloudVoiceConsent) { _, enabled in
-            if !enabled {
-                voiceCoach.stopLocalAudioImmediately()
-                Task { await voiceCoach.stop() }
-            }
-        }
-        .onChange(of: preferences.hasHeroGenerationConsent) { _, enabled in
-            if !enabled { heroLabViewModel.cancelCloudWork() }
-        }
-        .onChange(of: learningViewModel.question.id) { _, _ in
-            guard voiceCoach.isSessionActive else { return }
-            Task { await voiceCoach.updateChallenge(learningViewModel.question) }
-        }
-        .onChange(of: voiceCoach.phase) { _, phase in
-            if phase == .listening, voiceChildID == learningViewModel.journeys?.selectedID {
-                learningViewModel.journeys?.markVoiceLearningStarted()
-            }
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { preferences.refreshDeviceLanguage() }
-            if phase != .active {
-                voiceCoach.stopLocalAudioImmediately()
-                Task { await voiceCoach.stop() }
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .generatedHeroImagesWillDelete)) { _ in
-            selectedHeroBackgroundData = nil
-        }
-        .task {
-            if preferences.cloudVoiceMode == .managedAccount,
-               preferences.agreementAcceptance?.accountID != ParentAccount.shared.accountID {
-                preferences.clearAgreement()
-            }
-            #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("--ui-testing-voice-status") {
-                voiceCoach.showCoachSpeakingStatusForUITesting()
-            }
-            #endif
-            voiceCoach.onClockAnswer = { report in
-                guard voiceChildID == learningViewModel.journeys?.selectedID,
-                      let hour = report.hour, let minute = report.minute, !report.unknown else {
-                    return
-                }
-                learningViewModel.chooseSpoken(ClockTime(hour: hour, minute: minute))
-            }
-            voiceCoach.onLiveClockAnswer = { report, questionID in
-                guard voiceChildID == learningViewModel.journeys?.selectedID,
-                      learningViewModel.question.id == questionID,
-                      let hour = report.hour, let minute = report.minute, !report.unknown else { return }
-                learningViewModel.chooseSpoken(ClockTime(hour: hour, minute: minute))
-            }
-            voiceCoach.onSpokenCorrectAnswerFeedbackFinished = { questionID, _ in
-                guard learningViewModel.question.id == questionID else { return }
-                learningViewModel.continueAfterSpokenFeedback(questionID: questionID)
-            }
-            voiceCoach.onSpokenAutoAdvanceCancelled = {
-                learningViewModel.cancelSpokenAutoAdvance()
-            }
-            if let saved = try? await generatedHeroImageStore.loadSelectedBackground() {
-                selectedHeroBackgroundData = saved.imageData
-            }
         }
     }
 

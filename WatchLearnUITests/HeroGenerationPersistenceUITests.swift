@@ -156,13 +156,22 @@ final class HeroGenerationPersistenceUITests: XCTestCase {
     private func scrollUpUntilHittable(
         _ element: XCUIElement,
         in app: XCUIApplication,
-        attempts: Int = 8
+        attempts: Int = 24
     ) {
         for _ in 0..<attempts {
-            if element.exists && element.isHittable { return }
-            app.swipeUp()
+            let top = app.navigationBars.firstMatch.frame.maxY + 8
+            let bottom = app.frame.maxY - 90
+            let frame = element.exists ? element.frame : .zero
+            if element.exists && element.isHittable && frame.minY >= top && frame.maxY <= bottom { return }
+            // A full-screen flick can skip a LazyVGrid row on compact phones.
+            // A partially obscured button may also report itself as hittable.
+            let aboveViewport = !frame.isEmpty && frame.minY < top
+            let overflow = aboveViewport ? top - frame.minY : frame.maxY - bottom
+            let distance = frame.isEmpty ? 0.25 : min(0.25, max(0.08, (overflow + 12) / app.frame.height))
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: aboveViewport ? 0.4 : 0.7))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: (aboveViewport ? 0.4 + distance : 0.7 - distance)))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
         }
-        XCTAssertTrue(element.waitForExistence(timeout: 3))
-        XCTAssertTrue(element.isHittable)
+        XCTFail("Control did not become fully visible: \(element.identifier)")
     }
 }

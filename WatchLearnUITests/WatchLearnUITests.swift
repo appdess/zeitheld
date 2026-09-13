@@ -279,21 +279,35 @@ final class WatchLearnUITests: XCTestCase {
         func visibleBounds() -> ClosedRange<CGFloat> {
             let navigation = app.navigationBars.firstMatch
             let top = navigation.exists ? navigation.frame.maxY + 8 : app.frame.minY + 100
-            return top...(app.frame.maxY - 90)
+            let learnTab = app.buttons["learn-tab"]
+            // Sheets cover the app's tab bar and can use the bottom of the screen.
+            let bottom = learnTab.exists && learnTab.isHittable ? learnTab.frame.minY - 8 : app.frame.maxY - 12
+            return top...max(top, bottom)
         }
         for _ in 0..<18 {
+            var scrollDown = false
+            var distance: CGFloat = 0.25
             if element.exists {
-                if element.isHittable && !fullyVisible { return }
                 let frame = element.frame, bounds = visibleBounds()
+                if element.isHittable && !fullyVisible && frame.height > bounds.upperBound - bounds.lowerBound {
+                    return
+                }
                 if element.isHittable && frame.minY >= bounds.lowerBound && frame.maxY <= bounds.upperBound {
                     return
                 }
                 if !frame.isEmpty && frame.minY < bounds.lowerBound {
-                    app.swipeDown(velocity: .slow)
-                    continue
+                    scrollDown = true
+                    distance = min(0.25, max(0.08, (bounds.lowerBound - frame.minY + 12) / app.frame.height))
+                } else if !frame.isEmpty && frame.maxY > bounds.upperBound {
+                    distance = min(0.25, max(0.08, (frame.maxY - bounds.upperBound + 12) / app.frame.height))
                 }
             }
-            app.swipeUp(velocity: .slow)
+            // Short drags can place long consent rows inside a compact viewport;
+            // full-screen swipes can oscillate past the same row in both directions.
+            let startY: CGFloat = scrollDown ? 0.4 : 0.75
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startY))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startY + (scrollDown ? distance : -distance)))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
         }
         XCTFail("Control did not become visible: \(element.identifier)")
     }
@@ -521,7 +535,10 @@ final class WatchLearnUITests: XCTestCase {
         XCTAssertTrue(storedKey.exists)
 
         // Leave the shared Simulator Keychain clean for manual and live runs.
-        app.buttons["api-key-delete"].tap()
+        let delete = app.buttons["api-key-delete"]
+        scrollTo(delete, in: app)
+        delete.tap()
+        XCTAssertFalse(delete.exists)
     }
 
     func testEarnedProgressPersistsAcrossRelaunch() throws {

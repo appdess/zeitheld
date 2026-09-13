@@ -19,7 +19,12 @@ final class ManagedLiveIntegrationTests: XCTestCase {
         await ParentAccount.shared.refresh()
         XCTAssertNotNil(ParentAccount.shared.allowance)
         XCTAssertEqual(ParentAccount.shared.allowance?.active, false)
+        if let expected = ProcessInfo.processInfo.environment["WATCHLEARN_EXPECT_UNLIMITED"] {
+            XCTAssertTrue(["0", "1"].contains(expected), "Use 0 for the ordinary trial or 1 for unlimited access")
+            XCTAssertEqual(ParentAccount.shared.allowance?.unlimited, expected == "1")
+        }
         print("PARENT_ACCESS authenticated=true consent_verified=true active_session=false no_voice_started=true")
+        print("PARENT_ACCESS unlimited=\(ParentAccount.shared.allowance?.unlimited == true)")
     }
 
     func testSignedInHalfHoursStayDistinctAndContinueWithoutCheckingTalk() async throws {

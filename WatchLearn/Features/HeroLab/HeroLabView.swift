@@ -16,6 +16,8 @@ struct HeroLabView: View {
     @State private var voiceTask: Task<Void, Never>?
     @State private var selectionTask: Task<Void, Never>?
     @State private var showingChoices = false
+    @State private var presentedPicture: HeroImagePresentation?
+    @State private var sharedPicture: HeroImagePresentation?
     @FocusState private var isDescriptionFocused: Bool
 
     init(
@@ -99,6 +101,8 @@ struct HeroLabView: View {
             }
             .navigationTitle(copy(de: "Helden-Labor", en: "Hero Lab"))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color(.systemBackground), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
@@ -115,6 +119,17 @@ struct HeroLabView: View {
                     .accessibilityIdentifier("hero-back-to-clock")
                 }
             }
+        }
+        .fullScreenCover(item: $presentedPicture) { picture in
+            HeroImageViewer(picture: picture, language: language)
+        }
+        .sheet(item: $sharedPicture) { picture in
+            HeroImageShareSheet(data: picture.data)
+                .presentationDetents([.medium, .large])
+        }
+        .onChange(of: viewModel.coloringImageData) { oldImage, newImage in
+            guard let newImage, oldImage != newImage else { return }
+            presentedPicture = coloringPresentation(newImage)
         }
         .task { await viewModel.loadSavedImages() }
         .onReceive(NotificationCenter.default.publisher(for: .generatedHeroImagesWillDelete)) { _ in
@@ -154,45 +169,73 @@ struct HeroLabView: View {
     }
 
     private var heroPreview: some View {
-        ZStack(alignment: .bottomLeading) {
-            Group {
-                if let data = viewModel.latestImageData,
-                   let image = UIImage(data: data) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    Image("HeroEmber")
-                        .resizable()
-                        .scaledToFill()
+        KidCard {
+            VStack(spacing: 14) {
+                if let data = viewModel.latestImageData, let image = UIImage(data: data) {
+                    Button {
+                        presentedPicture = heroPresentation(data)
+                    } label: {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: 20))
+                            .overlay(alignment: .bottomTrailing) {
+                                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                    .font(.title3.bold())
+                                    .padding(12)
+                                    .background(.regularMaterial, in: Circle())
+                                    .padding(10)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(copy(de: "Deinen Zeithelden groß ansehen", en: "See your Time Hero up close"))
+                    .accessibilityIdentifier("hero-lab-preview")
+
+                    Button {
+                        sharedPicture = heroPresentation(data)
+                    } label: {
+                        Label(copy(de: "Heldenbild speichern oder teilen", en: "Save or share your hero"), systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(HeroButtonStyle(color: .indigo, isProminent: false))
+                    .accessibilityIdentifier("hero-share-button")
+                    coloringControls
                 }
             }
-            .frame(height: 320)
-            .frame(maxWidth: .infinity)
-            .clipped()
+        }
+    }
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text(copy(de: "Erschaffe deinen Zeithelden!", en: "Create your Time Hero!"))
-                    .font(.system(.title2, design: .rounded, weight: .heavy))
-                Text(copy(
-                    de: "Große Action. Freundlich. Ganz neu.",
-                    en: "Big action. Friendly. Completely original."
-                ))
-                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+    @ViewBuilder private var coloringControls: some View {
+        if let coloring = viewModel.coloringImageData {
+            Button {
+                presentedPicture = coloringPresentation(coloring)
+            } label: {
+                Label(copy(de: "Ausmalbild ansehen und speichern", en: "View and save coloring page"), systemImage: "pencil.and.outline")
             }
-            .foregroundStyle(.white)
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.black.opacity(0.52))
+            .buttonStyle(HeroButtonStyle(color: .indigo, isProminent: false))
+            .accessibilityIdentifier("hero-coloring-preview")
+        } else {
+            Button(action: createColoringPage) {
+                Label(copy(de: "Ausmalbild mit Uhr erstellen", en: "Create a coloring page with a clock"), systemImage: "pencil.and.outline")
+            }
+            .buttonStyle(HeroButtonStyle(color: .indigo, isProminent: false))
+            .disabled(viewModel.isBusy || viewModel.isRecording || !isOnlineEnabled)
+            .accessibilityIdentifier("hero-coloring-generate")
+            if viewModel.phase == .coloring {
+                ProgressView(copy(de: "Dein Ausmalbild entsteht …", en: "Creating your coloring page …"))
+                    .accessibilityIdentifier("hero-coloring-status")
+                Button(copy(de: "Abbrechen", en: "Cancel")) { viewModel.cancelCloudWork() }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("hero-coloring-cancel")
+            } else {
+                Text(copy(
+                    de: "Dein Held und eine große Uhr zum Ausmalen. Dafür wird dein Heldenbild noch einmal online verarbeitet. Dein Original bleibt erhalten.",
+                    en: "Your hero and a big clock to color. This sends your hero picture online again. Your original stays saved."
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 28))
-        .overlay {
-            RoundedRectangle(cornerRadius: 28)
-                .stroke(.white.opacity(0.8), lineWidth: 2)
-        }
-        .shadow(color: .black.opacity(0.14), radius: 14, y: 7)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("hero-lab-preview")
     }
 
     private var onlineStatusCard: some View {
@@ -451,8 +494,8 @@ struct HeroLabView: View {
                 }
 
                 Text(copy(
-                    de: "Vor dem Anzeigen prüft die App deine Beschreibung und das fertige Bild. Das Bild bleibt danach lokal auf diesem Gerät.",
-                    en: "Before showing it, the app checks your description and the finished picture. The picture is then kept locally on this device."
+                    de: "Vor dem Anzeigen prüft die App deine Beschreibung und das fertige Bild. Dein Heldenbild wird auf diesem Gerät gespeichert. Wenn du ein Ausmalbild erstellst, wird es erneut online verarbeitet.",
+                    en: "Before showing it, the app checks your description and the finished picture. Your hero picture is saved on this device. Creating a coloring page sends it online again."
                 ))
                 .font(.system(.footnote, design: .rounded))
                 .foregroundStyle(.secondary)
@@ -505,6 +548,20 @@ struct HeroLabView: View {
     private func createHero() {
         guard let apiKey = onlineCredential() else { return }
         viewModel.startGeneration(credential: apiKey)
+    }
+
+    private func createColoringPage() {
+        guard let credential = onlineCredential() else { return }
+        isDescriptionFocused = false
+        viewModel.startColoring(credential: credential)
+    }
+
+    private func heroPresentation(_ data: Data) -> HeroImagePresentation {
+        HeroImagePresentation(data: data, title: copy(de: "Dein Zeitheld", en: "Your Time Hero"))
+    }
+
+    private func coloringPresentation(_ data: Data) -> HeroImagePresentation {
+        HeroImagePresentation(data: data, title: copy(de: "Dein Ausmalbild", en: "Your coloring page"))
     }
 
     private func selectBackground() {

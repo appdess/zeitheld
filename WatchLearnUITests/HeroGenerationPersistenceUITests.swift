@@ -2,6 +2,97 @@ import XCTest
 
 @MainActor
 final class HeroGenerationPersistenceUITests: XCTestCase {
+    func testColoringPageGenerationOpensPreviewSharesAndReturnsToOriginalHero() throws {
+        let app = XCUIApplication()
+        app.launchArguments = fixtureArguments + ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        createFixtureHero(in: app)
+        let coloring = app.buttons["hero-coloring-generate"]
+        scrollUpUntilHittable(coloring, in: app)
+        coloring.tap()
+        let status = app.descendants(matching: .any)["hero-coloring-status"].firstMatch
+        XCTAssertTrue(status.waitForExistence(timeout: 3))
+        XCTAssertFalse(coloring.isEnabled, "Only one explicitly requested coloring edit may be active.")
+        completeFixtureRequest("coloring", in: app)
+        XCTAssertTrue(app.navigationBars["Your coloring page"].waitForExistence(timeout: 5))
+        let share = app.buttons["hero-large-share"]
+        XCTAssertTrue(share.isHittable)
+        share.tap()
+        let copyAction = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label == %@ OR label == %@", "Copy", "Kopieren"
+        )).firstMatch
+        XCTAssertTrue(copyAction.waitForExistence(timeout: 5), "The system share sheet must offer its image actions.")
+        let closeShare = app.buttons.matching(NSPredicate(
+            format: "label IN %@", ["Close", "Schließen", "Cancel", "Abbrechen"]
+        )).firstMatch
+        XCTAssertTrue(closeShare.waitForExistence(timeout: 3))
+        closeShare.tap()
+        XCTAssertTrue(app.buttons["hero-large-close"].isHittable)
+        app.buttons["hero-large-close"].tap()
+        let original = app.buttons["hero-lab-preview"]
+        XCTAssertTrue(original.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["hero-coloring-preview"].exists)
+        scrollUpUntilHittable(original, in: app)
+        original.tap()
+        XCTAssertTrue(app.navigationBars["Your Time Hero"].waitForExistence(timeout: 3))
+        app.buttons["hero-large-close"].tap()
+        app.buttons["hero-back-to-clock"].tap()
+        XCTAssertTrue(app.buttons["voice-coach-button"].waitForExistence(timeout: 3))
+    }
+
+    func testColoringCancellationPreservesOriginalAndAllowsExplicitRetry() throws {
+        let app = XCUIApplication()
+        app.launchArguments = fixtureArguments
+        app.launch()
+        createFixtureHero(in: app)
+        let coloring = app.buttons["hero-coloring-generate"]
+        scrollUpUntilHittable(coloring, in: app)
+        coloring.tap()
+        let cancel = app.buttons["hero-coloring-cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 3))
+        scrollUpUntilHittable(cancel, in: app)
+        cancel.tap()
+        let pending = app.buttons["ui-test-fixture-complete-coloring"]
+        let stopped = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            !pending.exists && !cancel.exists && coloring.isEnabled
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [stopped], timeout: 5), .completed)
+        XCTAssertFalse(app.buttons["hero-coloring-preview"].exists)
+        XCTAssertTrue(app.buttons["hero-lab-preview"].exists)
+        scrollUpUntilHittable(coloring, in: app)
+        coloring.tap()
+        completeFixtureRequest("coloring", in: app)
+        XCTAssertTrue(app.navigationBars["Your coloring page"].waitForExistence(timeout: 5))
+        app.buttons["hero-large-close"].tap()
+        app.buttons["hero-back-to-clock"].tap()
+        XCTAssertTrue(app.buttons["voice-coach-button"].waitForExistence(timeout: 3))
+    }
+
+    func testSavedHeroOpensLargePreviewAndReturnsToLab() throws {
+        let app = XCUIApplication()
+        app.launchArguments = fixtureArguments
+        app.launch()
+        app.buttons["hero-lab-tab"].tap()
+        let generate = app.buttons["hero-generate-button"]
+        scrollUpUntilHittable(generate, in: app)
+        generate.tap()
+        completeFixtureRequest("image", in: app)
+        let preview = app.buttons["hero-lab-preview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 12))
+        scrollUpUntilHittable(preview, in: app)
+        preview.tap()
+        let close = app.buttons["hero-large-close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 3))
+        XCTAssertTrue(close.isHittable)
+        XCTAssertTrue(app.buttons["hero-large-share"].isEnabled)
+        XCTAssertTrue(app.descendants(matching: .any)["hero-large-image"].firstMatch.exists)
+        close.tap()
+        XCTAssertTrue(app.buttons["hero-share-button"].exists)
+        XCTAssertTrue(app.buttons["hero-coloring-generate"].exists)
+        app.buttons["hero-back-to-clock"].tap()
+        XCTAssertTrue(app.buttons["voice-coach-button"].waitForExistence(timeout: 3))
+    }
+
     func testHeroVoiceInputShowsRecordingProcessingAndAcceptedDescription() throws {
         let app = XCUIApplication()
         app.launchArguments = fixtureArguments
@@ -145,6 +236,15 @@ final class HeroGenerationPersistenceUITests: XCTestCase {
             "--english",
             "--ui-testing-hero-generation-fixture"
         ]
+    }
+
+    private func createFixtureHero(in app: XCUIApplication) {
+        app.buttons["hero-lab-tab"].tap()
+        let generate = app.buttons["hero-generate-button"]
+        scrollUpUntilHittable(generate, in: app)
+        generate.tap()
+        completeFixtureRequest("image", in: app)
+        XCTAssertTrue(app.buttons["hero-lab-preview"].waitForExistence(timeout: 12))
     }
 
     private func completeFixtureRequest(_ request: String, in app: XCUIApplication) {

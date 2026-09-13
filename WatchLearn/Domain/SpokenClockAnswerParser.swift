@@ -4,6 +4,15 @@ import Foundation
 /// no access to the target clock: an incorrect answer must stay incorrect.
 /// Questions, mixed alternatives and unfamiliar phrasing use the normal fallback.
 enum SpokenClockAnswerParser {
+    /// This only decides whether to request extraction, never whether an answer
+    /// is correct. The extractor still rejects questions and unclear alternatives.
+    static func mayContainTimeExpression(_ text: String) -> Bool {
+        let text = text.lowercased()
+        return text.contains("uhr") || text.contains("halb ") || text.contains("half past ")
+            || text.contains("o'clock") || text.contains("o’clock")
+            || text.range(of: "[0-9]{1,2}:[0-9]{2}", options: .regularExpression) != nil
+    }
+
     /// Automatic grading requires a time expression. A bare number may answer
     /// a teaching question about a clock numeral, so it still needs delegation.
     static func parseExplicitTime(_ text: String, language: RealtimeCoachLanguage) -> ClockAnswerReport? {
@@ -85,13 +94,40 @@ enum SpokenClockAnswerParser {
 struct LiveClockTranscriptBuffer {
     private(set) var text = ""
     private(set) var changedAt: TimeInterval = -.infinity
-    mutating func append(_ fragment: String, at time: TimeInterval) {
+    private var lastInputEndMS: Double?
+    private var coachReply: (start: Double, end: Double)?
+
+    mutating func observeCoachTranscript(startMS: Double?, endMS: Double?) {
+        guard let startMS, let endMS, startMS.isFinite, endMS.isFinite, endMS >= startMS else { return }
+        if endMS > (coachReply?.end ?? -.infinity) { coachReply = (startMS, endMS) }
+    }
+
+    mutating func append(_ fragment: String, at time: TimeInterval, startMS: Double? = nil, endMS: Double? = nil) {
+        // A new reply after the coach's response is not a continuation of the
+        // earlier request for help. Only discard recognizable help requests:
+        // duplex coach speech may fall between fragments of the SAME time.
+        let previous = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let helpRequest = ["kannst du", "hilf mir", "erklär", "erklaer", "ich verstehe", "was bedeutet", "wie lese",
+                           "can you", "help me", "please explain", "i don't understand", "what does", "how do i read"]
+            .contains { previous.hasPrefix($0) }
+        if helpRequest, let startMS, let lastInputEndMS, let coachReply,
+           startMS >= coachReply.end, lastInputEndMS <= coachReply.start {
+            text = ""
+        }
+        if let endMS, endMS.isFinite { lastInputEndMS = max(lastInputEndMS ?? 0, endMS) }
         text = String((text + fragment).suffix(3000)); changedAt = time
     }
+    var settlingSeconds: TimeInterval {
+        // A punctuated complete time can be delivered promptly. Unfinished
+        // fragments retain the longer window for minutes and self-corrections.
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.last.map { ".!?".contains($0) } == true && !trimmed.hasSuffix("...") ? 0.4 : 1
+    }
+    func isSettled(at time: TimeInterval) -> Bool { time - changedAt >= settlingSeconds }
     func localAnswer(language: RealtimeCoachLanguage, at time: TimeInterval) -> ClockAnswerReport? {
-        guard time - changedAt >= 1 else { return nil }
+        guard isSettled(at: time) else { return nil }
         return SpokenClockAnswerParser.parseExplicitTime(text, language: language)
     }
     mutating func take() -> String { let value = text; text = ""; return value }
-    mutating func reset() { text = ""; changedAt = -.infinity }
+    mutating func reset() { text = ""; changedAt = -.infinity; lastInputEndMS = nil; coachReply = nil }
 }

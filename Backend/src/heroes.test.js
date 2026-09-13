@@ -1,7 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { heroPrompt } from './heroes.js';
+import { heroPrompt, coloringInput } from './heroes.js';
 const design={skinTone:'warm',power:'starGlow',gear:'clockGauntlets',scene:'clockCity'};
+test('coloring references accept bounded PNGs and reject malformed or oversized images before paid work',()=>{
+  const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=';
+  assert.deepEqual(coloringInput({image:png}),Buffer.from(png,'base64'));
+  const oversized=Buffer.from(png,'base64');oversized.writeUInt32BE(100000,16);
+  for (const input of [{}, {image:'not an image'}, {image:Buffer.alloc(64).toString('base64')},
+    {image:oversized.toString('base64')},{image:'A'.repeat(11184816)}]) {
+    assert.throws(()=>coloringInput(input),e=>e.code==='invalid_hero_image');
+  }
+});
 test('server builds a fixed child-friendly prompt from allowlisted design options',()=>{
   const prompt=heroPrompt({design,description:'A friendly explorer with green boots'});
   assert.match(prompt,/friendly clock-themed gloves/);

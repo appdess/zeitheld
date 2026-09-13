@@ -15,7 +15,7 @@ struct LiveConnectionSetupError: Error {
 /// SDP, audio, questions or transcripts enter the persisted support history.
 @MainActor @Observable
 final class LiveConnectionHistory {
-    enum Operation: String, Codable { case conversation, accessCheck, cleanup }
+    enum Operation: String, Codable { case conversation, accessCheck, cleanup, answerCheck }
     enum Outcome: String, Codable { case started, connected, failed, retrying, cancelled, stopped }
     struct Entry: Codable, Identifiable {
         let id: UUID

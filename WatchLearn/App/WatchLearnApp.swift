@@ -51,6 +51,9 @@ struct WatchLearnApp: App {
         let imageGenerator: any HeroImageGenerating = usesHeroGenerationUITestFixture
             ? ControlledHeroImageUITestGenerator()
             : OpenAIHeroImageGenerationService()
+        let coloringGenerator: any HeroColoringPageGenerating = usesHeroGenerationUITestFixture
+            ? ControlledHeroColoringUITestGenerator()
+            : HeroColoringPageService()
         let usageBudget: any HeroCloudUsageBudgeting = usesHeroGenerationUITestFixture
             ? UnlimitedHeroCloudUsageBudget()
             : PersistentHeroCloudUsageBudget()
@@ -64,6 +67,7 @@ struct WatchLearnApp: App {
         let generatedHeroImageStore = GeneratedHeroImageStore()
         let usesHeroGenerationUITestFixture = false
         let imageGenerator: any HeroImageGenerating = OpenAIHeroImageGenerationService()
+        let coloringGenerator: any HeroColoringPageGenerating = HeroColoringPageService()
         let usageBudget: any HeroCloudUsageBudgeting = PersistentHeroCloudUsageBudget()
         let heroRecorder: any HeroDescriptionRecording = HeroDescriptionRecorder()
         let heroTranscriber: any HeroDescriptionTranscribing = OpenAITranscriptionService()
@@ -89,6 +93,7 @@ struct WatchLearnApp: App {
         ))
         _heroLabViewModel = State(initialValue: HeroLabViewModel(
             imageGenerator: imageGenerator,
+            coloringGenerator: coloringGenerator,
             transcriber: heroTranscriber,
             recorder: heroRecorder,
             store: generatedHeroImageStore,

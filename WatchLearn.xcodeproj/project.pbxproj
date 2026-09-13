@@ -14,6 +14,7 @@
 		1E5F0DBD91C47F77067DEB37 /* ParentAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B2C73002DEF6FFD2B55C19C /* ParentAccount.swift */; };
 		1F2C5169F6C332B2D35A6B64 /* HeroRecorderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EDD044804331016702141FB /* HeroRecorderIntegrationTests.swift */; };
 		1F802ED32389DB0EE5175A84 /* LiveEventCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D886FDD317A644BA76CA53 /* LiveEventCodec.swift */; };
+		1FFB6951DFD32FAF7EECA7DF /* HeroColoringPageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7B66B697CC5D056CFE9281 /* HeroColoringPageService.swift */; };
 		206577D44DFA41F1893634DA /* LiveOpenAIRealtimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEA7EBF6C3F37C41C50837C6 /* LiveOpenAIRealtimeTests.swift */; };
 		23DB00ADDCE94237B5E37D71 /* RealtimeAudioEngineIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E35521A97BF469C6BFBFA868 /* RealtimeAudioEngineIntegrationTests.swift */; };
 		24289ED5455CF4FA490CB5FD /* LiveOpenAIHeroTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DF7E8E1638D863415543069 /* LiveOpenAIHeroTests.swift */; };
@@ -23,6 +24,7 @@
 		456862CD66C882FF95A63C20 /* LiveOpenAINativeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A02E6F595B29C51F6D74E739 /* LiveOpenAINativeTests.swift */; };
 		46C421EE2B6938478F1EA2C7 /* LiveConnectionHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69AC8D339A47F0E344AF65C6 /* LiveConnectionHistory.swift */; };
 		47DBEDC9E774B89A610CA384 /* SpokenClockAnswerParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA6A3C5E69F68027295B2E13 /* SpokenClockAnswerParser.swift */; };
+		483CF3E496254C02569F4578 /* HeroImageViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E50B78DDC39ADDD603A3798 /* HeroImageViewer.swift */; };
 		4856BB1140FD351A07140C67 /* HeroCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = C41065876B23CECEFE9179A8 /* HeroCredential.swift */; };
 		48DE6BEE1E5AEAADEC98BD98 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 42B40EBC6668621AA5A542AB /* FirebaseAuth */; };
 		4F8B69AA7C99D372A89A304B /* RealtimeCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52571FBCD184645BE8DE968D /* RealtimeCodecTests.swift */; };
@@ -46,6 +48,7 @@
 		7A801C9A6AD911E48B3E2B5B /* SpokenClockAnswerParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7D66BB493E8AB1508946B22 /* SpokenClockAnswerParserTests.swift */; };
 		7C3ADCB702012E49712B43FE /* RealtimeTokenProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB153D6510088A464A773C67 /* RealtimeTokenProviderTests.swift */; };
 		82FCA341118E8527B875C372 /* ParentPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = D13206FAAE127C6E8A1648C7 /* ParentPreferences.swift */; };
+		85C70074E3450036D6731ED4 /* JourneyStageSelectionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B563670D324A2A6102C42A80 /* JourneyStageSelectionUITests.swift */; };
 		85FA2DB4226B7274F823B3C9 /* HeroLabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 510703946B8CC6E212B65E7D /* HeroLabView.swift */; };
 		8648A2C7867FD0B46884E785 /* WatchLearnApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67D2BC2DB9418E4521EAED80 /* WatchLearnApp.swift */; };
 		867C3D6A70C44D531D9379B9 /* HeroCloudUsageBudget.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3F53B8F7682A524781948E0 /* HeroCloudUsageBudget.swift */; };
@@ -58,6 +61,7 @@
 		90570C3AB6A4FDA2FB20D841 /* ParentSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DDD2C2C929547A8FC8F97B6 /* ParentSettingsView.swift */; };
 		95192F4C29F71F2429762E13 /* VoiceCoachCoordinatorSecurityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F145614B31BB812ADFDB563 /* VoiceCoachCoordinatorSecurityTests.swift */; };
 		9CE6BFB4487F5B9B5E8FA3B0 /* RealtimeEventCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3DBE72AAA883B00FD4D60DA /* RealtimeEventCodec.swift */; };
+		9E645E7B8407BE412695248E /* HeroColoringPageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECAF0DF2A8AEDEF726431842 /* HeroColoringPageTests.swift */; };
 		A804BD9F036BB87686682305 /* LiveAnalogClockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85C6EA4A106226F8402ADBE7 /* LiveAnalogClockView.swift */; };
 		A9EDADEF08ABD7940E602E7D /* WatchLearnComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 992BB3D4B559797360A7028E /* WatchLearnComponents.swift */; };
 		AB4BB7A92607BA4CE6138545 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C80B15678793067E6D27657B /* PrivacyInfo.xcprivacy */; };
@@ -169,6 +173,8 @@
 		916E69658642410ABF3289C8 /* LearningLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningLanguage.swift; sourceTree = "<group>"; };
 		938EB499FE270CFD2B38AA18 /* KeychainSecureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainSecureStore.swift; sourceTree = "<group>"; };
 		992BB3D4B559797360A7028E /* WatchLearnComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLearnComponents.swift; sourceTree = "<group>"; };
+		9C7B66B697CC5D056CFE9281 /* HeroColoringPageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroColoringPageService.swift; sourceTree = "<group>"; };
+		9E50B78DDC39ADDD603A3798 /* HeroImageViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroImageViewer.swift; sourceTree = "<group>"; };
 		A02E6F595B29C51F6D74E739 /* LiveOpenAINativeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveOpenAINativeTests.swift; sourceTree = "<group>"; };
 		A29B640DC3441BD15F57AB3F /* KeychainPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainPreferencesTests.swift; sourceTree = "<group>"; };
 		A46FD4A44CACEF447CFA1D51 /* HeroThemeStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroThemeStyle.swift; sourceTree = "<group>"; };
@@ -178,6 +184,7 @@
 		AEA7EBF6C3F37C41C50837C6 /* LiveOpenAIRealtimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveOpenAIRealtimeTests.swift; sourceTree = "<group>"; };
 		B18F867ACED4D2E023CE5431 /* TimeLearningEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeLearningEngine.swift; sourceTree = "<group>"; };
 		B1C7B93F2A9F7EC2DD1151BD /* WatchLearnUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WatchLearnUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B563670D324A2A6102C42A80 /* JourneyStageSelectionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JourneyStageSelectionUITests.swift; sourceTree = "<group>"; };
 		B584C6662F7A4D8B03205CC7 /* JourneyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JourneyView.swift; sourceTree = "<group>"; };
 		BA6A3C5E69F68027295B2E13 /* SpokenClockAnswerParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpokenClockAnswerParser.swift; sourceTree = "<group>"; };
 		BB599291D950D107E8AAFAF3 /* RealtimeAudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeAudioEngine.swift; sourceTree = "<group>"; };
@@ -197,6 +204,7 @@
 		E55743FE0C34A808037C4816 /* PendingLiveSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingLiveSessionStore.swift; sourceTree = "<group>"; };
 		E9E398C398CC23EF3B44FB6A /* HeroLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroLifecycleTests.swift; sourceTree = "<group>"; };
 		EC6D1869C0CE8F0EE33357DD /* HeroImageStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroImageStoreTests.swift; sourceTree = "<group>"; };
+		ECAF0DF2A8AEDEF726431842 /* HeroColoringPageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroColoringPageTests.swift; sourceTree = "<group>"; };
 		F1245753068DABAC32064BD9 /* LearningModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningModels.swift; sourceTree = "<group>"; };
 		F25414C07D109CACC82E73D5 /* AnalogClockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalogClockView.swift; sourceTree = "<group>"; };
 		F7D66BB493E8AB1508946B22 /* SpokenClockAnswerParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpokenClockAnswerParserTests.swift; sourceTree = "<group>"; };
@@ -269,6 +277,7 @@
 		2C80A411BB3407E4078DD354 /* HeroLab */ = {
 			isa = PBXGroup;
 			children = (
+				9E50B78DDC39ADDD603A3798 /* HeroImageViewer.swift */,
 				510703946B8CC6E212B65E7D /* HeroLabView.swift */,
 				F9A3E7170132398D4FBAAB5A /* HeroLabViewModel.swift */,
 			);
@@ -281,6 +290,7 @@
 				6F75EA1C14498B3708C40F2D /* GeneratedHeroImageStore.swift */,
 				75BD50F26CCAC48109E83F84 /* GeneratedHeroNotifications.swift */,
 				C3F53B8F7682A524781948E0 /* HeroCloudUsageBudget.swift */,
+				9C7B66B697CC5D056CFE9281 /* HeroColoringPageService.swift */,
 				64EDC6E58BE2AC06459E06E7 /* HeroPromptPolicy.swift */,
 				3A0276AD58F5E1EF54F633E3 /* OpenAIHeroImageGenerationService.swift */,
 			);
@@ -410,6 +420,7 @@
 			isa = PBXGroup;
 			children = (
 				ABE4B3ACC7552ADA9E16D386 /* HeroGenerationPersistenceUITests.swift */,
+				B563670D324A2A6102C42A80 /* JourneyStageSelectionUITests.swift */,
 				FBEC3A820B480D8BC5E77EBD /* WatchLearnUITests.swift */,
 			);
 			path = WatchLearnUITests;
@@ -443,6 +454,7 @@
 			children = (
 				8A037DE0D03F8A08AE48BC10 /* ChildJourneyTests.swift */,
 				75E8B20D5338EBAC1FE366E3 /* HeroCloudUsageBudgetTests.swift */,
+				ECAF0DF2A8AEDEF726431842 /* HeroColoringPageTests.swift */,
 				EC6D1869C0CE8F0EE33357DD /* HeroImageStoreTests.swift */,
 				E9E398C398CC23EF3B44FB6A /* HeroLifecycleTests.swift */,
 				8CE1996DF5FF5B323264C4CF /* HeroOpenAIServiceTests.swift */,
@@ -621,6 +633,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B620029B7B3FD7BE333777C4 /* HeroGenerationPersistenceUITests.swift in Sources */,
+				85C70074E3450036D6731ED4 /* JourneyStageSelectionUITests.swift in Sources */,
 				58E7E6E923819140BE136C39 /* WatchLearnUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -631,6 +644,7 @@
 			files = (
 				8CFB7A0A88DD4EB36B3BA58B /* ChildJourneyTests.swift in Sources */,
 				E8D38796B0B206931A1006A3 /* HeroCloudUsageBudgetTests.swift in Sources */,
+				9E645E7B8407BE412695248E /* HeroColoringPageTests.swift in Sources */,
 				883704E80D10E75884D8D509 /* HeroImageStoreTests.swift in Sources */,
 				4007066F0CD07E93C6A75B59 /* HeroLifecycleTests.swift in Sources */,
 				C287B8F4394B9DE3B1DE0589 /* HeroOpenAIServiceTests.swift in Sources */,
@@ -666,10 +680,12 @@
 				EB89A2E8AC65041D28BDAF14 /* GeneratedHeroImageStore.swift in Sources */,
 				06BB50764C8F563AC46DD3C7 /* GeneratedHeroNotifications.swift in Sources */,
 				867C3D6A70C44D531D9379B9 /* HeroCloudUsageBudget.swift in Sources */,
+				1FFB6951DFD32FAF7EECA7DF /* HeroColoringPageService.swift in Sources */,
 				4856BB1140FD351A07140C67 /* HeroCredential.swift in Sources */,
 				CEDB867A3186F5BA8005BD50 /* HeroDescriptionRecorder.swift in Sources */,
 				00CC8D1C2D7603F8EA509F0A /* HeroDesign.swift in Sources */,
 				FF2137B4AD36006D700F08D6 /* HeroGenerationUITestFixture.swift in Sources */,
+				483CF3E496254C02569F4578 /* HeroImageViewer.swift in Sources */,
 				85FA2DB4226B7274F823B3C9 /* HeroLabView.swift in Sources */,
 				C2641FD6B437BF86CFB6A95A /* HeroLabViewModel.swift in Sources */,
 				5698F2CB912D4A51AECE1CCE /* HeroPromptPolicy.swift in Sources */,
@@ -751,7 +767,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = WatchLearn/Resources/WatchLearn.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = WatchLearn/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -810,7 +826,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = WatchLearn/Resources/WatchLearn.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = WatchLearn/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

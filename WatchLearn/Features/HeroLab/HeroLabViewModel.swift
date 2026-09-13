@@ -6,6 +6,7 @@ enum HeroLabPhase: Equatable, Sendable {
     case recording
     case transcribing
     case generating
+    case coloring
     case saving
 }
 
@@ -21,6 +22,7 @@ enum HeroLabIssue: Equatable, Sendable {
     case localSaveFailed
     case localCleanupFailed
     case usageLimit(HeroCloudUsageBudgetError)
+    case serviceLimit(HeroServiceLimit)
 
     func message(in language: LearningLanguage) -> String {
         switch (self, language) {
@@ -50,6 +52,22 @@ enum HeroLabIssue: Equatable, Sendable {
             "Der Kinder-Sicherheitsfilter hat diese Idee oder dieses Bild gestoppt. Probiere eine freundlichere Idee."
         case (.safetyRejected, .english):
             "The child-safety filter stopped that idea or picture. Try a friendlier idea."
+        case (.serviceLimit(.cooldown), .german):
+            "Kurze Heldenpause: Bitte warte bis zu 15 Sekunden und versuche es noch einmal. Deine Idee bleibt erhalten."
+        case (.serviceLimit(.cooldown), .english):
+            "A short hero break: please wait up to 15 seconds and try again. Your idea is still here."
+        case (.serviceLimit(.busy), .german), (.onlineFailed(status: 429, requestID: _), .german):
+            "Das Heldenlabor hat gerade viel zu tun. Warte kurz und versuche es noch einmal. Deine Idee bleibt erhalten."
+        case (.serviceLimit(.busy), .english), (.onlineFailed(status: 429, requestID: _), .english):
+            "The Hero Lab is busy right now. Wait a moment and try again. Your idea is still here."
+        case (.serviceLimit(.daily), .german):
+            "Das Online-Heldenlabor hat sein Tageslimit erreicht. Morgen geht es weiter. Deine Idee bleibt erhalten."
+        case (.serviceLimit(.daily), .english):
+            "The online Hero Lab has reached its daily limit. Try again tomorrow. Your idea is still here."
+        case (.serviceLimit(.trial), .german):
+            "Die kostenlosen Versuche im Heldenlabor sind aufgebraucht. Eine erwachsene Person kann in den Einstellungen einen eigenen API-Key hinzufügen."
+        case (.serviceLimit(.trial), .english):
+            "The free Hero Lab attempts are used up. A grown-up can add their own API key in Settings."
         case (.onlineFailed, .german):
             "Das Online-Heldenlabor ist gerade nicht erreichbar. Bitte versuche es später noch einmal."
         case (.onlineFailed, .english):
@@ -74,7 +92,7 @@ enum HeroLabIssue: Equatable, Sendable {
             switch error {
             case let .cooldown(_, seconds):
                 "Kurze Heldenpause: Bitte warte noch \(seconds) Sekunden."
-            case .dailyLimit(.image):
+            case .dailyLimit(.image), .dailyLimit(.coloring):
                 "Für heute sind alle Heldenbilder erstellt. Morgen geht es weiter."
             case .dailyLimit(.transcription):
                 "Für heute sind alle Sprachideen aufgenommen. Du kannst weiter die Bild-Knöpfe benutzen."
@@ -83,7 +101,7 @@ enum HeroLabIssue: Equatable, Sendable {
             switch error {
             case let .cooldown(_, seconds):
                 "Hero break: please wait another \(seconds) seconds."
-            case .dailyLimit(.image):
+            case .dailyLimit(.image), .dailyLimit(.coloring):
                 "Today's hero pictures are all used. Come back tomorrow."
             case .dailyLimit(.transcription):
                 "Today's voice ideas are all used. You can keep using the picture buttons."
@@ -97,6 +115,7 @@ enum HeroLabIssue: Equatable, Sendable {
 @Observable
 final class HeroLabViewModel {
     private let imageGenerator: any HeroImageGenerating
+    private let coloringGenerator: any HeroColoringPageGenerating
     private let transcriber: any HeroDescriptionTranscribing
     private let recorder: any HeroDescriptionRecording
     private let store: GeneratedHeroImageStore
@@ -106,6 +125,7 @@ final class HeroLabViewModel {
     var descriptionText = ""
     private(set) var phase: HeroLabPhase = .idle
     private(set) var latestImageData: Data?
+    private(set) var coloringImageData: Data?
     private(set) var selectedBackgroundData: Data?
     private(set) var issue: HeroLabIssue?
     private(set) var voiceDescriptionAccepted = false
@@ -118,12 +138,14 @@ final class HeroLabViewModel {
 
     init(
         imageGenerator: any HeroImageGenerating = OpenAIHeroImageGenerationService(),
+        coloringGenerator: any HeroColoringPageGenerating = HeroColoringPageService(),
         transcriber: any HeroDescriptionTranscribing = OpenAITranscriptionService(),
         recorder: any HeroDescriptionRecording = HeroDescriptionRecorder(),
         store: GeneratedHeroImageStore = GeneratedHeroImageStore(),
         usageBudget: any HeroCloudUsageBudgeting = PersistentHeroCloudUsageBudget()
     ) {
         self.imageGenerator = imageGenerator
+        self.coloringGenerator = coloringGenerator
         self.transcriber = transcriber
         self.recorder = recorder
         self.store = store
@@ -144,6 +166,7 @@ final class HeroLabViewModel {
             guard revision == imageStateRevision,
                   activeCloudOperationID == nil,
                   activeSelectionOperationID == nil else { return }
+            if latestImageData != latest { coloringImageData = nil }
             latestImageData = latest
             selectedBackgroundData = selected
         } catch let error as GeneratedHeroImageStoreError
@@ -375,6 +398,7 @@ final class HeroLabViewModel {
                 finish(operationID: operationID)
                 return
             }
+            coloringImageData = nil
             latestImageData = committed.imageData
             imageStateRevision &+= 1
             finish(operationID: operationID)
@@ -412,6 +436,54 @@ final class HeroLabViewModel {
             } else {
                 finish(operationID: operationID)
             }
+        }
+    }
+
+    /// The original hero remains the saved image and clock background. The
+    /// coloring version is kept locally in memory until replaced or deleted.
+    @discardableResult
+    func startColoring(credential: HeroCredential?) -> Task<Void, Never> {
+        guard phase == .idle else { return Task {} }
+        let taskID = UUID()
+        generationTaskID = taskID
+        let task = Task { @MainActor in
+            await self.generateColoring(credential: credential)
+            if self.generationTaskID == taskID {
+                self.generationTaskID = nil
+                self.generationTask = nil
+            }
+        }
+        generationTask = task
+        return task
+    }
+
+    func generateColoring(credential: HeroCredential?) async {
+        guard phase == .idle, let reference = latestImageData else { return }
+        guard let credential, credential.isAvailable else {
+            issue = .parentSetupRequired
+            return
+        }
+        let operationID = UUID()
+        activeCloudOperationID = operationID
+        cancelledCloudOperationID = nil
+        issue = nil
+        phase = .coloring
+        do {
+            try await usageBudget.authorize(.coloring, at: Date())
+            try Task.checkCancellation()
+            guard activeCloudOperationID == operationID else { return }
+            let image = try await coloringGenerator.generate(referenceImageData: reference, credential: credential)
+            try Task.checkCancellation()
+            guard activeCloudOperationID == operationID, latestImageData == reference else { return }
+            guard GeneratedHeroImageValidator.isValid(image) else { throw HeroOpenAIServiceError.invalidImage }
+            coloringImageData = image
+            finish(operationID: operationID)
+        } catch is CancellationError {
+            finish(operationID: operationID)
+        } catch let error as HeroCloudUsageBudgetError {
+            finish(operationID: operationID, issue: .usageLimit(error))
+        } catch {
+            finish(operationID: operationID, issue: mapOnlineError(error))
         }
     }
 
@@ -608,6 +680,8 @@ final class HeroLabViewModel {
             return .onlineFailed(status: nil, requestID: nil)
         case .contentRejected:
             return .safetyRejected
+        case let .serviceLimit(limit):
+            return .serviceLimit(limit)
         }
     }
 
@@ -625,6 +699,8 @@ final class HeroLabViewModel {
             .invalidResponse
         case .responseTooLarge:
             .invalidResponse
+        case let .serviceLimit(limit):
+            .serviceLimit(limit)
         }
     }
 }

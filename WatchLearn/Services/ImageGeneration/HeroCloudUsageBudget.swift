@@ -2,6 +2,7 @@ import Foundation
 
 enum HeroCloudOperation: String, Sendable {
     case image
+    case coloring
     case transcription
 }
 
@@ -42,8 +43,11 @@ final class PersistentHeroCloudUsageBudget: HeroCloudUsageBudgeting {
 
     func authorize(_ operation: HeroCloudOperation, at date: Date = Date()) async throws {
         let day = calendar.startOfDay(for: date).timeIntervalSince1970
-        let dayKey = "\(keyPrefix).\(operation.rawValue).day"
-        let countKey = "\(keyPrefix).\(operation.rawValue).count"
+        // Coloring immediately after a new hero is a normal flow. Both spend
+        // the same image allowance, but repeated taps have separate cooldowns.
+        let allowance = operation == .coloring ? HeroCloudOperation.image : operation
+        let dayKey = "\(keyPrefix).\(allowance.rawValue).day"
+        let countKey = "\(keyPrefix).\(allowance.rawValue).count"
         let lastKey = "\(keyPrefix).\(operation.rawValue).last"
 
         var count = defaults.integer(forKey: countKey)
@@ -52,16 +56,20 @@ final class PersistentHeroCloudUsageBudget: HeroCloudUsageBudgeting {
             defaults.set(day, forKey: dayKey)
             defaults.set(0, forKey: countKey)
             defaults.removeObject(forKey: lastKey)
+            if allowance == .image {
+                defaults.removeObject(forKey: "\(keyPrefix).image.last")
+                defaults.removeObject(forKey: "\(keyPrefix).coloring.last")
+            }
         }
 
-        let dailyLimit = operation == .image
+        let dailyLimit = allowance == .image
             ? Limit.imagesPerDay
             : Limit.transcriptionsPerDay
         guard count < dailyLimit else {
             throw HeroCloudUsageBudgetError.dailyLimit(operation: operation)
         }
 
-        let cooldown = operation == .image
+        let cooldown = allowance == .image
             ? Limit.imageCooldown
             : Limit.transcriptionCooldown
         let last = defaults.double(forKey: lastKey)

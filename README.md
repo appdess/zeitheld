@@ -20,10 +20,15 @@ invitation are not available yet. Publishing this source does not enable them.
 
 - Practice full hours, half hours, quarters, five-minute steps and exact minutes.
 - Follow a separate saved learning journey for each child, including correct and
-  incorrect answers. Reset one journey without removing the others.
+  incorrect answers. Revisit any stage without losing stars or completed stages,
+  or reset one journey without removing the others. Half-hour practice always
+  shows a half hour before progressing to quarters.
 - Use the device language automatically, or choose German/English in Settings.
 - Describe an original hero first; optionally pick appearance and scene details.
   Voice entry shows recording, processing and accepted-text feedback.
+- Open your saved hero full-screen, zoom, and save or share it. Optionally create
+  a printable coloring page of the same hero with a clock; this explicit online
+  image edit uses the image allowance and keeps the original intact.
 - Optional GPT-Live voice uses native, full-duplex WebRTC. A short first
   conversation asks about familiarity with clocks and numbers; local code grades
   clock answers. AI responses can be wrong and need adult supervision.

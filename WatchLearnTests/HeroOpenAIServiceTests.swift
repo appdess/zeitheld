@@ -4,6 +4,21 @@ import XCTest
 @testable import WatchLearn
 
 final class HeroOpenAIServiceTests: XCTestCase {
+    func testManagedHeroFailuresExplainCooldownAndQuotaInsteadOfAnOutage() throws {
+        for limit in [HeroServiceLimit.cooldown, .busy, .daily, .trial] {
+            let data = try JSONSerialization.data(withJSONObject: ["error": limit.rawValue])
+            let error = HeroOpenAIServiceError.managedResponseError(status: limit == .trial ? 402 : 429, data: data)
+            XCTAssertEqual(error, .serviceLimit(limit))
+            for language in [LearningLanguage.german, .english] {
+                let text = HeroLabIssue.serviceLimit(limit).message(in: language)
+                XCTAssertFalse(text.contains("nicht erreichbar"))
+                XCTAssertFalse(text.contains("not available"))
+            }
+        }
+        XCTAssertEqual(HeroOpenAIServiceError.managedResponseError(status: 422, data: Data()), .contentRejected)
+        XCTAssertEqual(HeroOpenAIServiceError.managedResponseError(status: 503, data: Data()), .httpStatus(503, requestID: nil))
+    }
+
     override func tearDown() {
         HeroMockURLProtocol.requestHandler = nil
         super.tearDown()

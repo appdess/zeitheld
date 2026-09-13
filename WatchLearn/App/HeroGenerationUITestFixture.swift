@@ -33,7 +33,7 @@ enum HeroGenerationUITestFixture {
 final class HeroUITestRequestGate {
     static let shared = HeroUITestRequestGate()
     enum Request: String, CaseIterable {
-        case image, description
+        case image, description, coloring
     }
     private(set) var pending = Set<Request>()
 
@@ -78,6 +78,22 @@ struct ControlledHeroImageUITestGenerator: HeroImageGenerating {
             throw HeroOpenAIServiceError.invalidImage
         }
         return GeneratedHeroImage(imageData: imageData, prompt: "ui-test-fixture")
+    }
+}
+
+/// A separate, gated edit fixture. Receiving the local hero and returning a
+/// valid PNG exercises the real coloring lifecycle without any network call.
+struct ControlledHeroColoringUITestGenerator: HeroColoringPageGenerating {
+    func generate(referenceImageData: Data, credential _: HeroCredential) async throws -> Data {
+        guard GeneratedHeroImageValidator.isValid(referenceImageData) else {
+            throw HeroOpenAIServiceError.invalidImage
+        }
+        try await HeroUITestRequestGate.shared.waitForRelease(.coloring)
+        let encodedPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        guard let data = Data(base64Encoded: encodedPNG) else {
+            throw HeroOpenAIServiceError.invalidImage
+        }
+        return data
     }
 }
 

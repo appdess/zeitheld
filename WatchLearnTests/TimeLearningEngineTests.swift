@@ -2,6 +2,27 @@ import XCTest
 @testable import WatchLearn
 
 final class TimeLearningEngineTests: XCTestCase {
+    func testJourneyRequiresFourActualHalfHoursBeforeQuarterHoursAcrossSeeds() throws {
+        for seed in UInt64(0)..<100 {
+            var engine = TimeLearningEngine(seed: seed)
+            for _ in 0..<4 {
+                XCTAssertEqual(engine.currentQuestion.level, .fullHour)
+                _ = engine.submit(answer: engine.currentQuestion.time)
+                XCTAssertTrue(engine.moveToNextQuestion())
+            }
+            for index in 0..<4 {
+                XCTAssertEqual(engine.currentQuestion.level, .halfHour)
+                XCTAssertEqual(engine.currentQuestion.time.minute, 30)
+                let wrong = ClockTime(hour: engine.currentQuestion.time.hour, minute: 0)
+                _ = engine.submit(answer: wrong)
+                XCTAssertEqual(engine.progress.masteryCount, index)
+                _ = engine.submit(answer: engine.currentQuestion.time)
+                XCTAssertTrue(engine.moveToNextQuestion())
+            }
+            XCTAssertEqual(engine.currentQuestion.level, .quarterHour)
+        }
+    }
+
     func testDefaultLessonStartsInGermanFullHourEasyMode() {
         let engine = TimeLearningEngine()
 

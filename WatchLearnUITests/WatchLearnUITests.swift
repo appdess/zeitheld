@@ -189,9 +189,11 @@ final class WatchLearnUITests: XCTestCase {
         app.buttons["current-child-button"].tap()
         app.buttons["child-My Time Hero"].tap()
         let correct = app.staticTexts["Correct!"]
-        for _ in 0..<6 where !correct.isHittable { app.swipeUp() }
+        scrollTo(correct, in: app, fullyVisible: true)
         XCTAssertTrue(correct.isHittable)
-        XCTAssertTrue(app.staticTexts["Practise again"].exists)
+        let retry = app.staticTexts["Practise again"]
+        scrollTo(retry, in: app, fullyVisible: true)
+        XCTAssertTrue(retry.isHittable)
         app.buttons["journey-back-to-clock"].tap()
         app.buttons["hero-lab-tab"].tap()
         XCTAssertTrue(app.buttons["hero-back-to-clock"].waitForExistence(timeout: 3))

@@ -350,8 +350,12 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
             guard let delta = event["delta"] as? String, delta.utf8.count <= 10000 else { return }
             let child = type == "session.input_transcript.delta"
             if child, acceptsSpokenAnswers {
-                transcriptBuffer.append(delta, at: ProcessInfo.processInfo.systemUptime)
+                transcriptBuffer.append(delta, at: ProcessInfo.processInfo.systemUptime,
+                                        startMS: event["start_ms"] as? Double, endMS: event["end_ms"] as? Double)
                 scheduleLocalAnswer()
+            } else if !child {
+                transcriptBuffer.observeCoachTranscript(startMS: event["start_ms"] as? Double,
+                                                       endMS: event["end_ms"] as? Double)
             }
             continuation.yield(.transcriptDelta(speaker: child ? .child : .coach, text: delta))
         case "session.delegation.created":
@@ -374,7 +378,7 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
         }
     }
 
-    private func delegate(id: String, revision captured: UInt64) async {
+    private func delegate(id: String?, revision captured: UInt64) async {
         guard acceptsSpokenAnswers, let sessionID = localSessionID, let challenge, let questionID = challenge.questionID else { return }
         do {
             guard solvedQuestionID != questionID else {
@@ -388,7 +392,7 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
             while Date().timeIntervalSince(started) < 3 {
                 try await Task.sleep(for: .milliseconds(50))
                 guard revision == captured else { return }
-                if !transcriptBuffer.text.isEmpty && ProcessInfo.processInfo.systemUptime - transcriptBuffer.changedAt >= 1 { break }
+                if !transcriptBuffer.text.isEmpty && transcriptBuffer.isSettled(at: ProcessInfo.processInfo.systemUptime) { break }
             }
             guard revision == captured else { return }
             let text = transcriptBuffer.take()
@@ -404,7 +408,9 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
                 answer = .init(questionID: questionID, attempt: true, hour: report.hour, minute: report.minute, unknown: false)
                 diagnostics?("answer_path=local question=\(questionID)")
             } else {
-                let data = try await request("v1/sessions/\(sessionID)/answer", body: ["transcript": text, "questionID": questionID, "delegationID": id])
+                // App-started extraction has its own deduplication key. Only a
+                // real provider delegation ID is echoed into Live commentary.
+                let data = try await request("v1/sessions/\(sessionID)/answer", body: ["transcript": text, "questionID": questionID, "delegationID": id ?? "app-\(UUID().uuidString)"])
                 answer = try JSONDecoder().decode(ExtractedAnswer.self, from: data)
                 diagnostics?("answer_path=fallback question=\(questionID)")
             }
@@ -413,14 +419,18 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
             diagnostics?("extracted attempt=\(answer.attempt) unknown=\(answer.unknown) question=\(questionID)")
             guard answer.questionID == questionID else { return }
             if !answer.attempt {
-                for event in try LiveEventCodec.context("This was not a clock answer. Help briefly with the clock question, without grading or awarding a star.", delegationID: id) { try send(event) }
+                for event in try LiveEventCodec.context("This was not a clock answer. Help briefly with the clock question, without grading or awarding a star.", delegationID: id, quiet: id == nil) { try send(event) }
                 return
             }
             let report = ClockAnswerReport(hour: answer.hour, minute: answer.minute, unknown: answer.unknown)
             try await applyGrade(report, challenge: challenge, revision: captured, delegationID: id)
         } catch {
             guard !Task.isCancelled, captured == revision, ready else { return }
-            for event in (try? LiveEventCodec.context("The answer checker is unavailable. Do not grade. Invite the child to use the answer buttons.", delegationID: id)) ?? [] { try? send(event) }
+            connectionHistory?.record(.failed, operation: .answerCheck, mode: .managedAccount, error: error)
+            diagnostics?("answer_check_failed code=\(VoiceCoachFailure(error: error).code.rawValue)")
+            // An extraction error must not strand the child or end duplex audio.
+            // Invite a fresh explicit answer, which the local parser can grade.
+            for event in (try? LiveEventCodec.context("That answer could not be understood reliably. Do not grade or announce a checker failure. Ask gently to say the time again as one short sentence, in the child's language, without supplying an example time or the answer. Keep listening on the SAME clock. The answer buttons remain optional.", delegationID: id)) ?? [] { try? send(event) }
         }
     }
 
@@ -428,13 +438,19 @@ final class ManagedLiveSession: NSObject, VoiceCoachingService, VoiceCoachAudioM
     private func scheduleLocalAnswer() {
         localAnswerTask?.cancel()
         let captured = revision
+        let delay = transcriptBuffer.settlingSeconds + 0.05
         localAnswerTask = Task { [weak self] in
-            do { try await Task.sleep(for: .milliseconds(1050)) } catch { return }
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
             guard let self, self.ready, self.acceptsSpokenAnswers, self.revision == captured,
                   let challenge = self.challenge, let questionID = challenge.questionID,
-                  self.solvedQuestionID != questionID,
-                  let report = self.transcriptBuffer.localAnswer(language: challenge.language,
-                      at: ProcessInfo.processInfo.systemUptime) else { return }
+                  self.solvedQuestionID != questionID else { return }
+            guard let report = self.transcriptBuffer.localAnswer(language: challenge.language,
+                      at: ProcessInfo.processInfo.systemUptime) else {
+                if SpokenClockAnswerParser.mayContainTimeExpression(self.transcriptBuffer.text) {
+                    await self.delegate(id: nil, revision: captured)
+                }
+                return
+            }
             _ = self.transcriptBuffer.take()
             self.localAnswerTask = nil
             self.diagnostics?("answer_path=local question=\(questionID)")

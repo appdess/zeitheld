@@ -112,6 +112,14 @@ traits and the optional short idea through the backend to OpenAI for moderation
 and image generation. The generated picture is checked again before returning.
 The backend does not persist the idea or generated image.
 
+Opening a saved hero in the large preview does not upload it. Saving or sharing
+uses the iOS share sheet and sends the image only to the destination you choose.
+If you explicitly request a coloring page, the existing generated hero image is
+sent to OpenAI again to create a black-outline version with a clock. The reference
+and result are moderated; the same online-image permission and image allowance
+apply. The coloring result is kept in app memory until replaced or the app closes;
+save or share it if you want to keep it. The backend does not retain either image.
+
 Recording a hero idea creates a short temporary audio file. The backend admits and counts the attempt before decoding or native parsing, then validates
 its size, audio format and duration before transcription. Invalid media attempts
 also count against the allowance. Its temporary copy is

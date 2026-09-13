@@ -282,6 +282,9 @@ final class ParentAccount {
             data.append(byte)
         }
         guard response.statusCode == 200 else {
+            if path.hasPrefix("v1/heroes/") {
+                throw HeroOpenAIServiceError.managedResponseError(status: response.statusCode, data: data)
+            }
             if path == "v1/account" || path.hasPrefix("v1/sessions/") {
                 throw ManagedAccountError.responseError(status: response.statusCode, data: data)
             }

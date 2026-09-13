@@ -14,6 +14,13 @@ protocol HeroImageGenerating: Sendable {
     ) async throws -> GeneratedHeroImage
 }
 
+enum HeroServiceLimit: String, Equatable, Sendable {
+    case cooldown = "hero_cooldown"
+    case busy = "hero_busy"
+    case daily = "hero_daily_limit"
+    case trial = "hero_trial_limit"
+}
+
 enum HeroOpenAIServiceError: LocalizedError, Equatable, Sendable {
     case missingCredential
     case invalidHTTPResponse
@@ -22,6 +29,18 @@ enum HeroOpenAIServiceError: LocalizedError, Equatable, Sendable {
     case contentRejected
     case invalidImage
     case responseTooLarge
+    case serviceLimit(HeroServiceLimit)
+
+    static func managedResponseError(status: Int, data: Data) -> Self {
+        let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        if status == 429 || status == 402,
+           let code = payload?["error"] as? String, let limit = HeroServiceLimit(rawValue: code) {
+            return .serviceLimit(limit)
+        }
+        if status == 422 { return .contentRejected }
+        if status == 401 || status == 403 { return .missingCredential }
+        return .httpStatus(status, requestID: nil)
+    }
 
     var errorDescription: String? {
         switch self {
@@ -43,6 +62,8 @@ enum HeroOpenAIServiceError: LocalizedError, Equatable, Sendable {
             "The online hero service did not return a usable picture."
         case .responseTooLarge:
             "The online hero service returned more data than the app can safely process."
+        case .serviceLimit:
+            "The online hero service has reached a usage or request limit."
         }
     }
 }

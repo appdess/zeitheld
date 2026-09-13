@@ -68,21 +68,55 @@ struct JourneyView: View {
                                       "This child's stars, progress and answers will be erased. Other children's journeys are kept."))
                         }
                     }
-                    Section(copy("Deine Lernreise", "Your learning journey")) {
+                    Section {
                         ForEach(TimeLearningLevel.allCases) { level in
-                            HStack {
-                                Image(systemName: journeys.selected.masteredLevels?.contains(level) == true
-                                    ? "checkmark.circle.fill" : level == model.progress.level ? "play.circle.fill" : "circle")
-                                VStack(alignment: .leading) {
-                                    Text(level.title(language: model.language))
-                                    if level == model.progress.level && !model.progress.curriculumCompleted {
-                                        Text(copy("Hier übst du gerade", "You're practising here"))
-                                            .font(.caption).foregroundStyle(.secondary)
-                                        ProgressView(value: model.progress.masteryFraction(threshold: model.masteryThreshold))
+                            let isCurrent = level == model.progress.level && !model.progress.curriculumCompleted
+                            let isMastered = journeys.selected.masteredLevels?.contains(level) == true
+                            Button {
+                                // Returning to the current stage continues its
+                                // exercise. Revisiting another stage starts a
+                                // practice round while retaining earned history.
+                                if !isCurrent { model.start(level: level) }
+                                onLearn()
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: isMastered ? "checkmark.circle.fill" : isCurrent ? "play.circle.fill" : "circle")
+                                        .foregroundStyle(isMastered ? Color.green : Color.accentColor)
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(level.title(language: model.language))
+                                            .foregroundStyle(.primary)
+                                        Text(isCurrent
+                                             ? copy("Hier übst du gerade · Weiterüben", "You're practising here · Continue")
+                                             : isMastered
+                                                ? copy("Geschafft · Noch einmal üben", "Completed · Practise again")
+                                                : copy("Diese Stufe üben", "Practise this stage"))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                        if isCurrent {
+                                            ProgressView(value: model.progress.masteryFraction(threshold: model.masteryThreshold))
+                                        }
                                     }
+                                    Spacer(minLength: 4)
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
                                 }
-                            }.padding(.vertical, 4)
+                                .frame(minHeight: 44)
+                                .padding(.vertical, 4)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("journey-level-\(level.rawValue)")
+                            .accessibilityAddTraits(isCurrent ? .isSelected : [])
                         }
+                    } header: {
+                        Text(copy("Deine Lernreise", "Your learning journey"))
+                    } footer: {
+                        Text(copy("Wähle jederzeit eine Stufe zum Üben. Deine Sterne, Antworten und geschafften Stufen bleiben erhalten.",
+                                  "Choose any stage to practise. Your stars, answers and completed stages are kept."))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("journey-practice-note")
                     }
                     Section {
                         if journeys.selected.attempts.isEmpty {

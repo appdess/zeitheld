@@ -179,7 +179,9 @@ public struct TimeLearningEngine: Sendable {
         level: TimeLearningLevel,
         generator: inout SeededGenerator
     ) -> TimeQuestion {
-        let minutes = level.allowedMinutes
+        // This stage must actually teach :30 before admitting quarter hours.
+        // Using [0, 30] here could complete the whole stage with only full hours.
+        let minutes = level == .halfHour ? [30] : level.allowedMinutes
         let hour = Int.random(in: 1...12, using: &generator)
         let minute = minutes[Int.random(in: minutes.indices, using: &generator)]
         let answer = ClockTime(hour: hour, minute: minute)

@@ -3,6 +3,48 @@ import XCTest
 
 @MainActor
 final class ChildJourneyTests: XCTestCase {
+    func testRevisitingMasteredHalfAndFullHoursPreservesRewardsAndJourneyHistory() throws {
+        let suite = "journey-practice-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ChildJourneyStore(defaults: defaults)
+        let model = LearningViewModel(masteryThreshold: 2, journeys: store)
+
+        // Progress in the natural order before explicitly revisiting stages.
+        for expected in [TimeLearningLevel.fullHour, .halfHour] {
+            XCTAssertEqual(model.progress.level, expected)
+            for _ in 0..<2 {
+                model.choose(model.question.time)
+                model.continueLesson()
+            }
+        }
+        XCTAssertEqual(model.progress.level, .quarterHour)
+        XCTAssertEqual(store.selected.masteredLevels, [.fullHour, .halfHour])
+        let earned = model.progress
+        let attemptIDs = store.selected.attempts.map(\.id)
+        let mastered = store.selected.masteredLevels
+        let childID = store.selectedID
+
+        for revisited in [TimeLearningLevel.halfHour, .fullHour] {
+            model.start(level: revisited)
+            XCTAssertEqual(model.progress.level, revisited)
+            XCTAssertEqual(model.question.level, revisited)
+            XCTAssertEqual(model.question.time.minute, revisited == .halfHour ? 30 : 0)
+            XCTAssertEqual(model.progress.totalStars, earned.totalStars)
+            XCTAssertEqual(model.progress.totalAttempts, earned.totalAttempts)
+            XCTAssertEqual(model.progress.totalCorrect, earned.totalCorrect)
+            XCTAssertEqual(model.progress.longestStreak, earned.longestStreak)
+            XCTAssertEqual(store.selected.attempts.map(\.id), attemptIDs)
+            XCTAssertEqual(store.selected.masteredLevels, mastered)
+            XCTAssertEqual(store.selectedID, childID)
+        }
+        let restored = ChildJourneyStore(defaults: defaults)
+        XCTAssertEqual(restored.selected.progress.level, .fullHour)
+        XCTAssertEqual(restored.selected.progress.totalStars, earned.totalStars)
+        XCTAssertEqual(restored.selected.attempts.map(\.id), attemptIDs)
+        XCTAssertEqual(restored.selected.masteredLevels, mastered)
+    }
+
     func testVoiceIntroductionPersistsPerChildAndResetsWithJourney() throws {
         let name = "voice-introduction-\(UUID())"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: name))

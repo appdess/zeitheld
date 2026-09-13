@@ -10,6 +10,74 @@ import XCTest
 /// the physical microphone/speaker is replaced by a deterministic audio device.
 @MainActor
 final class ManagedLiveIntegrationTests: XCTestCase {
+    /// Explicit paid regression with synthetic audio: a failed extraction must
+    /// leave the same microphone/session usable for a subsequent clear answer.
+    func testFullHourRecoversAfterExtractionFailureWithoutRestartingVoice() async throws {
+        guard ProcessInfo.processInfo.environment["WATCHLEARN_RUN_RECOVERY_REHEARSAL"] == "1",
+              let address = ProcessInfo.processInfo.environment["WATCHLEARN_TEST_MANAGED_BROKER"],
+              let base = URL(string: address), base.host == "127.0.0.1",
+              let fixtures = ProcessInfo.processInfo.environment["WATCHLEARN_HALF_HOUR_FIXTURES"] else {
+            throw XCTSkip("Explicit opt-in synthetic provider rehearsal only.")
+        }
+        let audio = SyntheticWebRTCAudioDevice()
+        let factory = RTCPeerConnectionFactory(encoderFactory: nil, decoderFactory: nil, audioDevice: audio)
+        let service = ManagedLiveSession(baseURL: base, token: "fixture-synthetic-live-only", factory: factory)
+        var failedExtraction = false, localAnswers = 0, coach = "", speaking = false
+        var grades: [ClockAnswerReport] = [], advances: [Int] = []
+        var lastInputAt: TimeInterval?, localGradeDelay: TimeInterval?
+        service.diagnostics = {
+            if $0.hasPrefix("answer_check_failed") { failedExtraction = true }
+            if $0.hasPrefix("answer_path=local") { localAnswers += 1 }
+        }
+        let observer = Task { @MainActor in
+            for await event in service.events {
+                switch event {
+                case let .transcriptDelta(speaker, text):
+                    if speaker == .coach { coach += text }
+                    else { lastInputAt = ProcessInfo.processInfo.systemUptime }
+                case .assistantAudio: speaking = true
+                case .assistantAudioFinished: speaking = false
+                case let .liveClockAnswerReported(report, result, _):
+                    if result.accepted {
+                        grades.append(report)
+                        localGradeDelay = lastInputAt.map { ProcessInfo.processInfo.systemUptime - $0 }
+                    }
+                case let .liveAdvanceRequested(id): advances.append(id)
+                default: break
+                }
+            }
+        }
+        defer {
+            observer.cancel(); audio.finish()
+            let evidence = XCTAttachment(string: "Synthetic recovery: failedExtraction=\(failedExtraction), localAnswers=\(localAnswers), grades=\(grades.count), advances=\(advances), afterTranscriptSeconds=\(localGradeDelay ?? -1)\nCoach: \(coach)")
+            evidence.name = "Synthetic extraction recovery"; evidence.lifetime = .keepAlways; add(evidence)
+        }
+        do {
+            try await service.open(language: .german, safetyIdentifier: .init(stableID: "synthetic-recovery"))
+            try await service.setChallenge(.init(questionID: 1, hour: 11, minute: 0, difficulty: "fullHour", language: .german))
+            try await service.startVoice(authorizedBy: service.authorizeCaptureStart())
+            try await wait(20) { !coach.isEmpty && !speaking && audio.nonSilentOutputFrames > 4800 }
+            audio.say(try Data(contentsOf: URL(fileURLWithPath: fixtures).appendingPathComponent("synthetic-uncertain-eleven.pcm")))
+            try await wait(20) { failedExtraction }
+            let afterFailure = coach.count
+            try await wait(15) { coach.count > afterFailure && !speaking }
+            XCTAssertTrue(grades.isEmpty)
+            audio.say(try Data(contentsOf: URL(fileURLWithPath: fixtures).appendingPathComponent("synthetic-eleven.pcm")))
+            try await wait(20) { grades.count == 1 }
+            XCTAssertEqual(grades, [.init(hour: 11, minute: 0, unknown: false)])
+            XCTAssertEqual(localAnswers, 1)
+            XCTAssertLessThan(try XCTUnwrap(localGradeDelay), 1.6)
+            try await wait(15) { advances == [1] }
+            let beforeNext = coach.count
+            try await service.setChallenge(.init(questionID: 2, hour: 5, minute: 30, difficulty: "halfHour", language: .german))
+            try await wait(15) { coach.count > beforeNext && !speaking }
+            await service.disconnect()
+        } catch {
+            await service.disconnect()
+            throw error
+        }
+    }
+
     func testExistingParentCanRefreshManagedAccessWithoutStartingVoice() async throws {
         guard ProcessInfo.processInfo.environment["WATCHLEARN_RUN_SIGNED_IN_ACCOUNT_READ"] == "1" else {
             throw XCTSkip("Explicitly enable the connected parent's read-only account check.")

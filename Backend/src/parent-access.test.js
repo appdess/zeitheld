@@ -101,3 +101,32 @@ test('simultaneous admissions share account limits and native parser concurrency
   release(); await Promise.all([first,second]);
   await withParserSlot(()=>Promise.resolve());
 });
+
+test('a completed spoken idea can immediately create an image; repeats and overlapping work stay bounded',async()=>{
+  const db = await setup();
+  const recording = await reserveHero(db,who,'transcription');
+  await assert.rejects(reserveHero(db,who,'image'),e=>e.code==='hero_busy');
+  await finishHero(db,who,recording);
+  const image = await reserveHero(db,who,'image');
+  await finishHero(db,who,image);
+  for (const operation of ['image','transcription']) {
+    await assert.rejects(reserveHero(db,who,operation),e=>e.code==='hero_cooldown');
+  }
+  const value = db.rows.get('trialLedgers/synthetic-family');
+  assert.equal(value.heroImages,1);
+  assert.equal(value.heroRecordings,1);
+});
+
+test('a fresh hero can immediately become a coloring page within the same image quota',async()=>{
+  const db=await setup();
+  for (const kind of ['image','coloring']) {
+    const operation=await reserveHero(db,who,kind);
+    await finishHero(db,who,operation);
+  }
+  assert.equal(db.rows.get('trialLedgers/synthetic-family').heroImages,2);
+  await assert.rejects(reserveHero(db,who,'coloring'),e=>e.code==='hero_cooldown');
+  db.rows.set('trialLedgers/synthetic-family',{heroImages:3});
+  for (const kind of ['image','coloring']) {
+    await assert.rejects(reserveHero(db,who,kind),e=>e.code==='hero_trial_limit');
+  }
+});
